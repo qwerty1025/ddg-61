@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>點點綠排班戰略系統 v9.0 (雲端版)</title>
+    
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+    <style>
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: #f8fafc; color: #334155; overflow: hidden; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+        /* 捲軸與容器 */
+        .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .matrix-container { overflow: auto; height: 85vh; background: white; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); scroll-behavior: smooth; }
+        
+        /* 總表樣式 */
+        .matrix-table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 0.75rem; }
+        .matrix-table th, .matrix-table td { border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; padding: 4px 8px; white-space: nowrap; text-align: center; height: 32px; transition: background-color 0.3s;}
+        .matrix-table thead th { background-color: #f8fafc; position: sticky; top: 0; z-index: 20; font-weight: 700; color: #475569; }
+        .matrix-table td:first-child, .matrix-table th:first-child { position: sticky; left: 0; background-color: #fff; z-index: 30; font-weight: 700; text-align: left; border-right: 2px solid #64748b; color: #1e293b; }
+        .matrix-table th:first-child { z-index: 40; background-color: #f1f5f9; }
+        
+        /* 今日高光 */
+        .today-col-header { background-color: #fef08a !important; color: #854d0e !important; box-shadow: inset 0 -3px 0 #eab308; z-index: 25; }
+        .today-col-cell { background-color: #fef9c3 !important; border-left: 1px solid #fde047; border-right: 1px solid #fde047; }
+        
+        /* 視覺優化：士林綠廊與分區 */
+        .station-group-bg-odd { background-color: #ffffff; }
+        .station-group-bg-even { background-color: #f8fafc; }
+        .shilin-bg { background-color: #f0fdf4 !important; }
+        .station-divider { border-top: 3px solid #334155 !important; }
+
+        /* 看板樣式 */
+        .kanban-col { flex: 1; min-width: 320px; background: #f1f5f9; border-radius: 8px; display: flex; flex-direction: column; overflow: hidden; border: 1px solid #e2e8f0; }
+        .shift-card { font-size: 0.7rem; padding: 2px 6px; margin-bottom: 2px; background: white; border-radius: 4px; border-left: 3px solid #cbd5e1; box-shadow: 0 1px 1px rgba(0,0,0,0.05); cursor: pointer; transition: all 0.1s; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+        .shift-card:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+
+        /* 四色戰隊 */
+        .hl-red { background-color: #fef2f2 !important; color: #b91c1c; border-left-color: #ef4444 !important; font-weight: bold; }
+        .hl-yellow { background-color: #fefce8 !important; color: #854d0e; border-left-color: #eab308 !important; font-weight: bold; }
+        .hl-green { background-color: #f0fdf4 !important; color: #15803d; border-left-color: #22c55e !important; font-weight: bold; }
+        .hl-blue { background-color: #eff6ff !important; color: #1e40af; border-left-color: #3b82f6 !important; font-weight: bold; }
+
+        /* 列印專用樣式 (A4 Portrait) */
+        @media print {
+            @page { size: A4 portrait; margin: 10mm; }
+            body * { visibility: hidden; }
+            #print-area, #print-area * { visibility: visible; }
+            #print-area { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: white; overflow: visible; }
+            .no-print { display: none !important; }
+        }
+        
+        .print-card { border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; margin-bottom: 10px; page-break-inside: avoid; background: white; }
+        .print-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; font-size: 0.8rem; }
+        .print-day { border: 1px solid #e2e8f0; height: 60px; padding: 2px; display: flex; flex-direction: column; position: relative; }
+        .print-active { background-color: #f0fdf4; font-weight: bold; color: #166534; border-color: #86efac; }
+
+        [v-cloak] { display: none; }
+    </style>
+</head>
+<body>
+
+<div id="app" v-cloak class="h-screen flex flex-col">
+
+    <header class="h-14 bg-slate-900 text-white flex items-center justify-between px-4 shadow-md z-50 shrink-0 no-print">
+        <div class="flex items-center gap-4">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 bg-emerald-500 rounded flex items-center justify-center font-bold text-white shadow-lg">v9</div>
+                <h1 class="font-bold text-lg hidden md:block">排班戰略系統 <span v-if="isDBConnected" class="text-[10px] text-emerald-300 ml-1"><i class="fa-solid fa-cloud"></i> 已連線</span></h1>
+            </div>
+            
+            <div class="bg-slate-800 p-1 rounded flex gap-1">
+                <button @click="currentView='kanban'" :class="navClass('kanban')" class="px-3 py-1 text-xs rounded transition"><i class="fa-solid fa-columns"></i> 看板</button>
+                <button @click="currentView='matrix'" :class="navClass('matrix')" class="px-3 py-1 text-xs rounded transition"><i class="fa-solid fa-table-cells"></i> 總表</button>
+                <button @click="currentView='analysis'" :class="navClass('analysis')" class="px-3 py-1 text-xs rounded transition"><i class="fa-solid fa-chart-pie"></i> 分析</button>
+                <button @click="currentView='myschedule'" :class="navClass('myschedule')" class="px-3 py-1 text-xs rounded transition bg-indigo-600 hover:bg-indigo-500 text-white font-bold"><i class="fa-solid fa-print"></i> 我的班表</button>
+            </div>
+            
+            <button v-if="currentView === 'matrix'" @click="scrollToToday" class="bg-yellow-500 hover:bg-yellow-400 text-yellow-900 font-bold px-3 py-1 text-xs rounded transition ml-2 shadow">
+                <i class="fa-solid fa-bullseye"></i> 跳至今日
+            </button>
+        </div>
+
+        <div v-if="currentView !== 'myschedule'" class="hidden md:flex items-center gap-2 bg-slate-800 px-3 py-1 rounded border border-slate-700">
+            <span class="text-xs text-slate-400">PK:</span>
+            <select v-model="compareList[0]" class="bg-red-900/30 text-red-200 border-red-900 text-xs rounded w-20"><option value="">紅隊</option><option v-for="s in uniqueStaffList" :value="s">{{s}}</option></select>
+            <select v-model="compareList[1]" class="bg-yellow-900/30 text-yellow-200 border-yellow-900 text-xs rounded w-20"><option value="">黃隊</option><option v-for="s in uniqueStaffList" :value="s">{{s}}</option></select>
+            <select v-model="compareList[2]" class="bg-green-900/30 text-green-200 border-green-900 text-xs rounded w-20"><option value="">綠隊</option><option v-for="s in uniqueStaffList" :value="s">{{s}}</option></select>
+            <select v-model="compareList[3]" class="bg-blue-900/30 text-blue-200 border-blue-900 text-xs rounded w-20"><option value="">藍隊</option><option v-for="s in uniqueStaffList" :value="s">{{s}}</option></select>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <button @click="showInput = !showInput" class="text-slate-400 hover:text-white" title="重置/匯入原始資料"><i class="fa-solid fa-pen-to-square"></i></button>
+        </div>
+    </header>
+
+    <div v-if="showInput" class="absolute inset-0 bg-slate-900/90 z-[60] flex items-center justify-center p-4 no-print">
+        <div class="bg-white w-full max-w-4xl rounded-lg h-[80vh] flex flex-col p-4">
+            <div class="flex justify-between mb-2">
+                <h3 class="font-bold">原始資料編輯 (將會覆寫雲端資料表)</h3>
+                <div>
+                    <button @click="processCSV" class="bg-emerald-600 text-white px-4 py-1 rounded text-sm mr-2">覆寫並應用</button>
+                    <button @click="showInput = false" class="text-slate-500"><i class="fa-solid fa-times"></i></button>
+                </div>
+            </div>
+            <textarea v-model="csvInput" class="flex-grow p-2 font-mono text-xs border rounded"></textarea>
+        </div>
+    </div>
+
+    <main class="flex-grow p-4 overflow-hidden relative bg-slate-100">
+
+        <div v-if="currentView === 'kanban'" class="h-full flex gap-3 overflow-x-auto pb-2">
+            <div v-for="drawer in drawers" :key="drawer.key" class="kanban-col shadow-sm">
+                <div class="p-3 border-b bg-white flex justify-between items-center sticky top-0 z-10">
+                    <div class="flex items-center gap-2"><div class="w-1.5 h-6 rounded-full" :class="drawer.colorClass"></div><span class="font-bold text-slate-700">{{ drawer.name }}區</span></div>
+                    <div class="text-[10px] text-slate-400 border rounded px-1">{{ getDrawerShiftCount(drawer.key) }}場</div>
+                </div>
+                <div class="overflow-y-auto custom-scrollbar flex-grow p-1 sync-scroll-target" @scroll="handleSyncScroll">
+                    <div v-for="week in calendarWeeks" :key="week.id" class="mb-1">
+                        <div v-if="week.isMonthStart" class="text-[10px] font-bold text-slate-400 pl-1 mt-2 mb-1 border-l-2 border-emerald-400">{{ week.monthLabel }}</div>
+                        <div class="grid grid-cols-5 gap-1">
+                            <div v-for="day in week.days" :key="day.dateStr" class="min-h-[80px] bg-white border border-slate-200 rounded p-1 hover:bg-slate-50 relative" :class="{'ring-2 ring-yellow-400': day.dateStr === todayStr}">
+                                <div class="text-[10px] mb-1" :class="day.dateStr === todayStr ? 'text-yellow-600 font-bold' : 'text-slate-300'">{{ day.dayNum }}</div>
+                                <div v-for="shift in getShifts(day.dateStr, drawer.key)" :key="shift.id" class="shift-card" :class="getComparisonColorClass(shift.staff)" @click="editShiftCard(shift)">{{ truncateName(shift.staff) }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="h-10"></div>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="currentView === 'matrix'" class="matrix-container custom-scrollbar" id="matrixContainer">
+            <table class="matrix-table">
+                <thead>
+                    <tr>
+                        <th class="w-32 bg-slate-50">站名 \ 日期</th>
+                        <th v-for="header in matrixHeaders" :key="header.date" :id="'matrix-col-' + header.date" class="min-w-[40px]" :class="header.date === todayStr ? 'today-col-header' : ''">
+                            <div class="font-bold" :class="header.date === todayStr ? 'text-yellow-700' : 'text-slate-600'">{{ header.simpleDate }}</div>
+                            <div class="text-[9px] font-normal" :class="header.date === todayStr ? 'text-yellow-600' : 'text-slate-400'">{{ header.dayName }}</div>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template v-for="(group, gIndex) in matrixGroups" :key="group.name">
+                        <tr v-for="(row, rIndex) in group.rows" :key="row.station" 
+                            :class="[gIndex % 2 === 0 ? 'station-group-bg-odd' : 'station-group-bg-even', rIndex === 0 && gIndex !== 0 ? 'station-divider' : '', row.isShilin ? 'shilin-bg' : '']">
+                            <td>
+                                <div class="flex items-center justify-between">
+                                    <span>{{ row.station }}</span>
+                                    <span v-if="rIndex === 0" class="text-[9px] px-1 rounded text-white font-bold" :class="group.badgeClass">{{ group.name }}</span>
+                                </div>
+                            </td>
+                            <td v-for="(cell, i) in row.cells" :key="i" :class="[getComparisonColorClass(cell), matrixHeaders[i].date === todayStr ? 'today-col-cell' : '']">{{ cell }}</td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+
+        <div v-if="currentView === 'analysis'" class="h-full bg-white rounded-lg shadow overflow-hidden flex flex-col">
+            <div class="p-4 border-b bg-slate-50 flex justify-between">
+                <h3 class="font-bold text-slate-700">深度營運分析 (P1:11-1月 vs P2:2-4月)</h3>
+                <div class="text-xs text-slate-500">*綠色底代表 20場以上(85折)，藍色 10場以上(9折)</div>
+            </div>
+            <div class="overflow-auto p-4 custom-scrollbar">
+                <table class="w-full text-xs text-left border-collapse">
+                    <thead class="bg-slate-100 sticky top-0 text-slate-500 uppercase">
+                        <tr>
+                            <th class="px-3 py-2">排名</th>
+                            <th class="px-3 py-2">廠商名稱</th>
+                            <th class="px-3 py-2 text-center border-l">前期(P1)場次</th>
+                            <th class="px-3 py-2 text-center">後期(P2)場次</th>
+                            <th class="px-3 py-2 text-center border-r">成長率</th>
+                            <th class="px-3 py-2 text-center text-amber-700 bg-amber-50">P1 分佈 (雙/士/石)</th>
+                            <th class="px-3 py-2 text-center text-emerald-700 bg-emerald-50">P2 分佈 (雙/士/石)</th>
+                            <th class="px-3 py-2 text-right border-l">P1 營收</th>
+                            <th class="px-3 py-2 text-right">P2 營收</th>
+                            <th class="px-3 py-2 text-right font-bold bg-slate-50">總營收預估</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        <tr v-for="(stat, idx) in analysisStats" :key="stat.name" :class="getRowColor(stat.tier)">
+                            <td class="px-3 py-2 font-mono text-slate-400">{{ idx+1 }}</td>
+                            <td class="px-3 py-2 font-bold">{{ stat.name }}</td>
+                            <td class="px-3 py-2 text-center border-l">{{ stat.p1Count }}</td>
+                            <td class="px-3 py-2 text-center font-bold">{{ stat.p2Count }}</td>
+                            <td class="px-3 py-2 text-center border-r">
+                                <span :class="stat.growth >= 0 ? 'text-green-600' : 'text-red-500'">{{ stat.growth }}%</span>
+                            </td>
+                            <td class="px-3 py-2 text-center font-mono text-[10px] bg-amber-50/30">{{ stat.p1Dist }}</td>
+                            <td class="px-3 py-2 text-center font-mono text-[10px] bg-emerald-50/30">{{ stat.p2Dist }}</td>
+                            <td class="px-3 py-2 text-right border-l text-slate-400">${{ stat.p1Rev.toLocaleString() }}</td>
+                            <td class="px-3 py-2 text-right font-bold text-slate-600">${{ stat.p2Rev.toLocaleString() }}</td>
+                            <td class="px-3 py-2 text-right font-bold text-emerald-700 bg-slate-50">${{ stat.totalRev.toLocaleString() }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div v-if="currentView === 'myschedule'" class="h-full flex flex-col md:flex-row gap-4">
+            <div class="w-full md:w-80 bg-white p-4 rounded-lg shadow h-full overflow-auto no-print shrink-0">
+                <h3 class="font-bold text-lg mb-4 border-b pb-2"><i class="fa-solid fa-print"></i> 列印與業績管理</h3>
+                
+                <div class="mb-4">
+                    <label class="block text-xs font-bold mb-1">1. 選擇廠商 (主角)</label>
+                    <select v-model="printTarget" class="w-full border rounded p-2 text-sm bg-slate-50">
+                        <option v-for="s in uniqueStaffList" :value="s">{{s}}</option>
+                    </select>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-xs font-bold mb-1">2. 選擇月份 (可多選)</label>
+                    <div class="grid grid-cols-3 gap-2">
+                        <label v-for="m in allMonths" :key="m" class="flex items-center text-xs p-1 border rounded cursor-pointer hover:bg-slate-50">
+                            <input type="checkbox" :value="m" v-model="printMonths" class="mr-1"> {{m}}
+                        </label>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-xs font-bold mb-1">3. 聯絡資訊 (顯示於標題下)</label>
+                    <textarea v-model="contactInfo" class="w-full border rounded p-2 text-sm h-20" placeholder="例如：訂購專線 0912-345-678&#10;Line ID: @xyz123"></textarea>
+                </div>
+
+                <div class="mb-6">
+                    <label class="block text-xs font-bold mb-1">4. QR Code 連結 (最多2個)</label>
+                    <input v-model="qrUrl1" placeholder="URL 1 (如 FB 粉專)" class="w-full border rounded p-1 text-xs mb-2">
+                    <input v-model="qrUrl2" placeholder="URL 2 (如 Line 加好友)" class="w-full border rounded p-1 text-xs">
+                    <button @click="genQR" class="mt-2 w-full bg-slate-200 text-xs py-1 rounded hover:bg-slate-300">重新生成 QR</button>
+                </div>
+
+                <button @click="printNow" class="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold shadow hover:bg-indigo-700 transition">
+                    <i class="fa-solid fa-print"></i> 立即列印 (A4)
+                </button>
+            </div>
+
+            <div id="print-area" class="flex-grow bg-white shadow-2xl p-8 overflow-y-auto">
+                <div class="flex justify-between items-start mb-6 border-b-2 border-slate-800 pb-4">
+                    <div>
+                        <h1 class="text-3xl font-bold text-slate-800 mb-2">{{ printTarget }} 出席班表</h1>
+                        <pre class="text-sm text-slate-600 font-sans whitespace-pre-wrap">{{ contactInfo }}</pre>
+                    </div>
+                    <div class="flex gap-4">
+                        <div v-if="qrUrl1" class="text-center">
+                            <div id="qrcode1"></div>
+                            <span class="text-[10px] text-slate-400">掃描連結 1</span>
+                        </div>
+                        <div v-if="qrUrl2" class="text-center">
+                            <div id="qrcode2"></div>
+                            <span class="text-[10px] text-slate-400">掃描連結 2</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-for="month in selectedMonthData" :key="month.label" class="print-card break-inside-avoid">
+                    <h3 class="text-lg font-bold text-center bg-slate-100 py-1 mb-2 rounded border border-slate-200">{{ month.label }}</h3>
+                    <div class="print-grid mb-1 border-b pb-1 font-bold text-slate-500">
+                        <div class="text-red-500">日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div class="text-red-500">六</div>
+                    </div>
+                    <div class="print-grid">
+                        <div v-for="d in month.days" :key="d.dateStr" 
+                             class="print-day group" 
+                             :class="{'print-active': d.shift}">
+                            <div class="text-right text-[10px] w-full" :class="d.isCurrent ? 'text-slate-600' : 'text-slate-200'">{{ d.dayNum }}</div>
+                            <div v-if="d.shift" class="text-xs text-center flex-grow flex flex-col justify-center items-center relative">
+                                <div>{{ d.shift.station }}</div>
+                                <div v-if="salesData[d.shift.id]" class="text-[10px] text-blue-600 font-bold mt-1 max-w-[90%] overflow-hidden text-ellipsis whitespace-nowrap cursor-help" :title="salesData[d.shift.id].note">
+                                    💰{{ salesData[d.shift.id].amount }}
+                                </div>
+                                <button @click.stop="reportSales(d.shift)" class="absolute bottom-[-2px] right-[-2px] text-slate-400 hover:text-blue-500 no-print opacity-0 group-hover:opacity-100 transition-opacity p-1">
+                                    <i class="fa-solid fa-pen-to-square"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-8 text-center text-[10px] text-slate-300">Generated by 點點綠排班戰略系統 (Cloud Edition)</div>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<script>
+    // Firebase 初始化設定
+    const firebaseConfig = {
+        apiKey: "AIzaSyB6D9vh6J2mdnjz2VXEVe99oi7oLF-irFo",
+        authDomain: "crm-ts-1225-001.firebaseapp.com",
+        databaseURL: "https://crm-ts-1225-001-default-rtdb.firebaseio.com",
+        projectId: "crm-ts-1225-001",
+        storageBucket: "crm-ts-1225-001.firebasestorage.app",
+        messagingSenderId: "925760221722",
+        appId: "1:925760221722:web:1aeda0b82f1f16b8dcd7a3"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    const { createApp, ref, computed, onMounted, nextTick } = Vue;
+
+    // 您的 CSV 預設資料 (作爲空資料庫的種子資料)
+    const defaultCSV = `站名 / 日期,11/3（一）,11/04（二）,11/05（三）,11/06（四）,11/07（五）,11/10（一）,11/11（二）,11/12（三）,11/13（四）,11/14（五）,11/17（一）,11/18（二）,11/19（三）,11/20（四）,11/21（五）,11/24（一）,11/25（二）,11/26（三）,11/27（四）,11/28（五）,12/01（一）,12/02（二）,12/03（三）,12/04（四）,12/05（五）,12/08（一）,12/09（二）,12/10（三）,12/11（四）,12/12（五）,12/15（一）,12/16（二）,12/17（三）,12/18（四）,12/19（五）,12/22（一）,12/23 （二）,12/24（三）,12/25（四）,12/26（五）,12/29（一）,12/30（二）,12/31（三）,01/01（四）,01/02（五）,01/05（一）,01/06（二）,01/07（三）,01/08（四）,01/09（五）,01/12（一）,01/13（二）,01/14（三）,01/15（四）,01/16（五）,01/19（一）,01/20（二）,01/21（三）,01/22（四）,01/23（五）,01/26（一）,01/27（二）,01/28（三）,01/29（四）,01/30（五）,02/02（一）,02/03（二）,02/04（三）,02/05（四）,02/06（五）,02/09（一）,02/10（二）,02/11（三）,02/12（四）,02/13（五）,02/23（一）,02/24（二）,02/25（三）,02/26（四）,02/27（五）,03/02（一）,03/03（二）,03/04（三）,03/05（四）,03/06（五）,03/09（一）,03/10（二）,03/11（三）,03/12（四）,03/13（五）,03/16（一）,03/17（二）,03/18（三）,03/19（四）,03/20（五）,03/23（一）,03/24（二）,03/25（三）,03/26（四）,03/27（五）,03/30（一）,03/31（二）,04/01（三）,04/02（四）,04/03（五）,04/06（一）,04/07（二）,04/08（三）,04/09（四）,04/10（五）,04/13（一）,04/14（二）,04/15（三）,04/16（四）,04/17（五）,04/20（一）,04/21（二）,04/22（三）,04/23（四）,04/24（五）,04/27（一）,04/28（二）,04/29（三）,04/30（四）
+雙連一,御品園放牧雞蛋,輝鴻有機農場,花蓮晴盛蜂場,樂穠,饅實在小舖,御品園放牧雞蛋,DIVA の吃貨棧,輝要有機菜園,樂穠,樂穠,御品園放牧雞蛋,輝鴻有機農場,修賢養蜂場,樂穠,川桑果園,瑞田有機農場,DIVA の吃貨棧,修賢養蜂場,瑞田有機農場,饅實在小舖,瑞田有機農場,雅芯香草園,修賢養蜂場,瑞田有機農場,川桑果園,御品園放牧雞蛋,DIVA の吃貨棧,修賢養蜂場,樂穠,川桑果園,御品園放牧雞蛋,永昇甘蔗,修賢養蜂場,樂穠,川桑果園,御品園放牧雞蛋,DIVA の吃貨棧,修賢養蜂場,樂穠,川桑果園,瑞田有機農場,永昇甘蔗,修賢養蜂場,松滿緣有機農場,川桑果園,御品園放牧雞蛋,永昇甘蔗,御品園放牧雞蛋,瑞田有機農場,川桑果園,御品園放牧雞蛋,DIVA の吃貨棧,御品園放牧雞蛋,樂穠,川桑果園,御品園放牧雞蛋,永昇甘蔗,御品園放牧雞蛋,瑞田有機農場,樂穠,御品園放牧雞蛋,DIVA の吃貨棧,御品園放牧雞蛋,樂穠,樂穠,瑞田農場,文獻農場,川桑果園,瑞田農場,樂穠,瑞田農場,雅芯香草園,輝要有機菜園,樂穠,川桑果園,雅芯香草園,阿財綠竹農場,雅芯香草園,樂穠,川桑果園,瑞田農場,文獻農場,輝要有機菜園,樂穠,饅實在小舖,瑞田農場,DIVA の 吃貨棧,阿財綠竹農場,樂穠,樂穠,瑞田農場,雅芯香草園,301farm農場,雅芯香草園,饅實在小舖,瑞田農場,,阿財綠竹農場,樂穠,川桑果園,瑞田農場,文獻農場,輝要有機菜園,樂穠,饅實在小舖,瑞田農場,阿財綠竹農場,阿財綠竹農場,樂穠,饅實在小舖,瑞田農場,雅芯香草園,,雅芯香草園,饅實在小舖,瑞田農場,輝鴻有機農場,阿財綠竹農場,樂穠,饅實在小舖,瑞田農場,DIVA の 吃貨棧,阿財綠竹農場,樂穠`;
+
+    createApp({
+        setup() {
+            const csvInput = ref(defaultCSV);
+            const showInput = ref(false);
+            const currentView = ref('kanban'); 
+            const compareList = ref(['', '', '', '']); 
+            
+            // 系統資料
+            const schedules = ref([]);
+            const salesData = ref({});
+            const isDBConnected = ref(false);
+            
+            // 取得今日字串 (YYYY-MM-DD 格式)
+            const getLocalToday = () => {
+                const d = new Date();
+                const y = d.getFullYear();
+                const m = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                return `${y}-${m}-${day}`;
+            };
+            const todayStr = ref(getLocalToday());
+
+            // 列印模組狀態
+            const printTarget = ref('');
+            const printMonths = ref([]);
+            const contactInfo = ref('訂購專線: 0912-345-678\nLine ID: @example');
+            const qrUrl1 = ref('https://www.facebook.com');
+            const qrUrl2 = ref('');
+
+            const drawers = [
+                { key: '雙連', name: '雙連', colorClass: 'bg-blue-500' },
+                { key: '士林', name: '士林', colorClass: 'bg-emerald-500' },
+                { key: '石牌', name: '石牌', colorClass: 'bg-amber-500' }
+            ];
+
+            const navClass = (view) => currentView.value === view ? 'bg-emerald-600 text-white shadow font-bold' : 'text-slate-400 hover:text-white';
+
+            // 將解析後的 CSV 直接推入 Firebase
+            const processCSV = () => {
+                const results = [];
+                const parsed = Papa.parse(csvInput.value, { header: false, skipEmptyLines: true });
+                const rows = parsed.data;
+                const colMap = {};
+
+                if (rows.length < 2) return;
+
+                rows[0].forEach((cell, idx) => {
+                    if (idx === 0) return;
+                    const match = cell.match(/(\d{1,2})\/(\d{1,2})/);
+                    if (match) {
+                        const m = parseInt(match[1]);
+                        const d = parseInt(match[2]);
+                        const y = m >= 11 ? 2025 : 2026;
+                        colMap[idx] = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                    }
+                });
+
+                for (let i = 1; i < rows.length; i++) {
+                    const row = rows[i];
+                    const stationRaw = row[0];
+                    if (!stationRaw) continue;
+
+                    let drawerKey = '';
+                    if (stationRaw.includes('雙連')) drawerKey = '雙連';
+                    else if (stationRaw.includes('士林')) drawerKey = '士林';
+                    else if (stationRaw.includes('石牌')) drawerKey = '石牌';
+
+                    row.forEach((cell, idx) => {
+                        if (idx === 0) return;
+                        const date = colMap[idx];
+                        if (date && cell && cell.trim()) {
+                            const staffs = cell.split(/[,，、]/).map(s => s.trim()).filter(s => s);
+                            staffs.forEach(s => {
+                                results.push({
+                                    id: Math.random().toString(36).slice(2),
+                                    date, drawer: drawerKey, station: stationRaw, subStation: stationRaw.replace(drawerKey, ''), staff: s
+                                });
+                            });
+                        }
+                    });
+                }
+                
+                // 覆寫 Firebase 資料
+                const updates = {};
+                results.forEach(s => updates[s.id] = s);
+                db.ref('schedules').set(updates);
+                
+                showInput.value = false;
+                nextTick(genQR);
+            };
+
+            // 確保「五寮尖山羊乳」永遠在選單中，方便產季預先排班
+            const uniqueStaffList = computed(() => {
+                const list = [...new Set(schedules.value.map(s => s.staff))];
+                if (!list.includes('五寮尖山羊乳')) {
+                    list.push('五寮尖山羊乳');
+                }
+                return list.sort();
+            });
+
+            // 擴充月份清單，強制加入 2026/04 ~ 2026/08 以涵蓋產乳旺季
+            const allMonths = computed(() => {
+                const dataMonths = schedules.value.map(s => s.date.substring(0, 7));
+                const peakSeasonMonths = ['2026-04', '2026-05', '2026-06', '2026-07', '2026-08'];
+                return [...new Set([...dataMonths, ...peakSeasonMonths])].sort();
+            });
+            
+            const truncateName = (name) => name.length > 3 ? name.substring(0, 3) + '..' : name;
+
+            const handleSyncScroll = (evt) => {
+                const scrollTop = evt.target.scrollTop;
+                document.querySelectorAll('.sync-scroll-target').forEach(el => {
+                    if (Math.abs(el.scrollTop - scrollTop) > 5) el.scrollTop = scrollTop;
+                });
+            };
+
+            // 總表「跳至今日」滾動功能
+            const scrollToToday = () => {
+                nextTick(() => {
+                    const el = document.getElementById('matrix-col-' + todayStr.value);
+                    if (el) {
+                        const container = document.getElementById('matrixContainer');
+                        const scrollPos = el.offsetLeft - (container.offsetWidth / 2) + (el.offsetWidth / 2);
+                        container.scrollTo({ left: scrollPos, behavior: 'smooth' });
+                    } else {
+                        Swal.fire({
+                            title: '提示',
+                            text: `總表中沒有今日 (${todayStr.value}) 的排班資料喔！`,
+                            icon: 'info',
+                            confirmButtonColor: '#10b981'
+                        });
+                    }
+                });
+            };
+
+            // Kanban Data
+            const calendarWeeks = computed(() => {
+                const dates = [...new Set(schedules.value.map(s => s.date))].sort();
+                if (dates.length === 0) return [];
+                const start = new Date(dates[0]);
+                const end = new Date(dates[dates.length-1]);
+                start.setDate(start.getDate() - (start.getDay() === 0 ? 6 : start.getDay() - 1));
+
+                const weeks = [];
+                let curr = new Date(start);
+                let lastMonth = -1;
+
+                while (curr <= end) {
+                    const days = [];
+                    let monthLabel = '';
+                    let isMonthStart = false;
+
+                    for (let i = 0; i < 5; i++) {
+                        const dStr = curr.toISOString().slice(0, 10);
+                        const m = curr.getMonth() + 1;
+                        if (m !== lastMonth && i === 0) {
+                            monthLabel = `${curr.getFullYear()}年 ${m}月`;
+                            isMonthStart = true;
+                            lastMonth = m;
+                        }
+                        days.push({ dateStr: dStr, dayNum: curr.getDate() });
+                        curr.setDate(curr.getDate() + 1);
+                    }
+                    weeks.push({ id: weeks.length, monthLabel, isMonthStart, days });
+                    curr.setDate(curr.getDate() + 2); 
+                }
+                return weeks;
+            });
+
+            const getShifts = (date, drawer) => schedules.value.filter(s => s.date === date && s.drawer === drawer);
+            const getDrawerShiftCount = (drawer) => schedules.value.filter(s => s.drawer === drawer).length;
+
+            // Matrix Data
+            const matrixHeaders = computed(() => {
+                const dates = [...new Set(schedules.value.map(s => s.date))].sort();
+                return dates.map(d => {
+                    const dateObj = new Date(d);
+                    const day = ['日','一','二','三','四','五','六'][dateObj.getDay()];
+                    return { simpleDate: `${dateObj.getMonth()+1}/${dateObj.getDate()}`, dayName: `(${day})`, date: d };
+                });
+            });
+
+            const matrixGroups = computed(() => {
+                const groups = [];
+                const allStations = [...new Set(schedules.value.map(s => s.station))].sort();
+                ['雙連', '士林', '石牌'].forEach(key => {
+                    const myStations = allStations.filter(s => s.includes(key));
+                    const rows = myStations.map(st => {
+                        const cells = matrixHeaders.value.map(h => {
+                            const match = schedules.value.find(s => s.date === h.date && s.station === st);
+                            return match ? match.staff : '';
+                        });
+                        return { station: st, cells, isShilin: key === '士林' };
+                    });
+                    if (rows.length > 0) {
+                        let badgeClass = 'bg-slate-500';
+                        if (key === '雙連') badgeClass = 'bg-blue-500';
+                        if (key === '士林') badgeClass = 'bg-emerald-500';
+                        if (key === '石牌') badgeClass = 'bg-amber-500';
+                        groups.push({ name: key, rows, badgeClass });
+                    }
+                });
+                return groups;
+            });
+
+            // Analysis Data
+            const analysisStats = computed(() => {
+                return uniqueStaffList.value.map(name => {
+                    const shifts = schedules.value.filter(s => s.staff === name);
+                    const p1Shifts = shifts.filter(s => [11, 12, 1].includes(parseInt(s.date.split('-')[1])));
+                    const p2Shifts = shifts.filter(s => [2, 3, 4].includes(parseInt(s.date.split('-')[1])));
+                    const p1Count = p1Shifts.length;
+                    const p2Count = p2Shifts.length;
+                    
+                    let growth = 0;
+                    if (p1Count > 0) growth = Math.round(((p2Count - p1Count) / p1Count) * 100);
+                    else if (p2Count > 0) growth = 100;
+
+                    const getDist = (list) => {
+                        const t = list.length || 1;
+                        const sl = list.filter(s => s.drawer === '雙連').length;
+                        const slin = list.filter(s => s.drawer === '士林').length;
+                        const sp = list.filter(s => s.drawer === '石牌').length;
+                        return `${Math.round(sl/t*100)} / ${Math.round(slin/t*100)} / ${Math.round(sp/t*100)}`;
+                    };
+
+                    const calcRev = (count) => {
+                        let rate = 1;
+                        if (count >= 20) rate = 0.85; else if (count >= 10) rate = 0.9;
+                        return Math.round(count * 800 * rate);
+                    };
+
+                    const totalCount = p1Count + p2Count;
+                    let tier = 'gray';
+                    if (totalCount >= 20) tier = 'gold';
+                    else if (totalCount >= 10) tier = 'blue';
+
+                    return {
+                        name, p1Count, p2Count, growth, tier,
+                        p1Dist: getDist(p1Shifts), p2Dist: getDist(p2Shifts),
+                        p1Rev: calcRev(p1Count), p2Rev: calcRev(p2Count),
+                        totalRev: calcRev(p1Count + p2Count)
+                    };
+                }).sort((a,b) => b.p2Count - a.p2Count);
+            });
+
+            // My Schedule Data
+            const selectedMonthData = computed(() => {
+                if (!printTarget.value || printMonths.value.length === 0) return [];
+                
+                return printMonths.value.sort().map(mStr => {
+                    const [y, m] = mStr.split('-');
+                    const daysInMonth = new Date(y, m, 0).getDate();
+                    const firstDay = new Date(y, m - 1, 1).getDay();
+                    
+                    const days = [];
+                    for(let i=0; i<firstDay; i++) days.push({ dayNum: '', isCurrent: false });
+                    for(let i=1; i<=daysInMonth; i++) {
+                        const dStr = `${mStr}-${String(i).padStart(2,'0')}`;
+                        const shift = schedules.value.find(s => s.staff === printTarget.value && s.date === dStr);
+                        days.push({ dayNum: i, isCurrent: true, dateStr: dStr, shift });
+                    }
+                    return { label: `${y}年 ${m}月`, days };
+                });
+            });
+
+            // 班表編輯 (同步至 Firebase)
+            const editShiftCard = (shift) => {
+                Swal.fire({
+                    title: '編輯排班',
+                    input: 'text',
+                    inputValue: shift.staff,
+                    showDenyButton: true,
+                    denyButtonText: '刪除',
+                    confirmButtonText: '保存'
+                }).then((res) => {
+                    if (res.isConfirmed) {
+                        db.ref(`schedules/${shift.id}`).update({ staff: res.value });
+                    } else if (res.isDenied) {
+                        db.ref(`schedules/${shift.id}`).remove();
+                        db.ref(`sales/${shift.id}`).remove(); // 同步移除業績
+                    }
+                });
+            };
+
+            // 業績回報功能 (寫入 Firebase)
+            const reportSales = (shift) => {
+                const existing = salesData.value[shift.id] || { amount: '', note: '' };
+                Swal.fire({
+                    title: `${shift.date} ${shift.station}`,
+                    html: `
+                        <div class="text-sm text-slate-500 mb-4">業績回報</div>
+                        <input id="swal-amount" class="swal2-input mt-2" placeholder="輸入營業額" type="number" value="${existing.amount}">
+                        <textarea id="swal-note" class="swal2-textarea" placeholder="備註 (如：天氣狀況、熱銷品等)" rows="2">${existing.note}</textarea>
+                    `,
+                    focusConfirm: false,
+                    showCancelButton: true,
+                    confirmButtonText: '儲存',
+                    cancelButtonText: '取消',
+                    preConfirm: () => {
+                        return {
+                            amount: document.getElementById('swal-amount').value,
+                            note: document.getElementById('swal-note').value
+                        }
+                    }
+                }).then(res => {
+                    if (res.isConfirmed) {
+                        if (res.value.amount || res.value.note) {
+                            db.ref(`sales/${shift.id}`).set({
+                                date: shift.date,
+                                staff: shift.staff,
+                                amount: res.value.amount,
+                                note: res.value.note
+                            });
+                        } else {
+                            db.ref(`sales/${shift.id}`).remove();
+                        }
+                    }
+                });
+            };
+
+            const getComparisonColorClass = (staffName) => {
+                if (!staffName) return '';
+                const idx = compareList.value.indexOf(staffName);
+                if (idx === 0) return 'hl-red';
+                if (idx === 1) return 'hl-yellow';
+                if (idx === 2) return 'hl-green';
+                if (idx === 3) return 'hl-blue';
+                return '';
+            };
+
+            const getRowColor = (tier) => {
+                if (tier === 'gold') return 'bg-yellow-50/50';
+                if (tier === 'blue') return 'bg-blue-50/50';
+                return '';
+            };
+
+            const genQR = () => {
+                const c1 = document.getElementById("qrcode1");
+                const c2 = document.getElementById("qrcode2");
+                if (c1) { c1.innerHTML = ''; if (qrUrl1.value) new QRCode(c1, { text: qrUrl1.value, width: 64, height: 64 }); }
+                if (c2) { c2.innerHTML = ''; if (qrUrl2.value) new QRCode(c2, { text: qrUrl2.value, width: 64, height: 64 }); }
+            };
+
+            const printNow = () => window.print();
+
+            // Firebase 掛載與監聽
+            onMounted(() => {
+                // 預設產季專注選項
+                if (printMonths.value.length === 0) {
+                    printMonths.value = ['2026-04', '2026-05', '2026-06', '2026-07', '2026-08'];
+                }
+
+                // 監聽排班表變動
+                db.ref('schedules').on('value', snap => {
+                    isDBConnected.value = true;
+                    if (snap.exists()) {
+                        const data = snap.val();
+                        schedules.value = Object.keys(data).map(k => data[k]);
+                        
+                        // 設定初次主角
+                        if (!printTarget.value && uniqueStaffList.value.length > 0) {
+                            printTarget.value = '五寮尖山羊乳'; // 預設保留你的最愛
+                        }
+                    } else if (csvInput.value) {
+                        // 如果資料庫是空的，將預設 CSV 解析並上傳
+                        processCSV();
+                    }
+                });
+
+                // 監聽業績回報變動
+                db.ref('sales').on('value', snap => {
+                    if (snap.exists()) {
+                        salesData.value = snap.val();
+                    } else {
+                        salesData.value = {};
+                    }
+                });
+            });
+
+            return {
+                csvInput, showInput, currentView, processCSV, navClass,
+                drawers, calendarWeeks, getShifts, getDrawerShiftCount, truncateName, handleSyncScroll,
+                matrixHeaders, matrixGroups, todayStr, scrollToToday,
+                compareList, uniqueStaffList, getComparisonColorClass, editShiftCard,
+                analysisStats, getRowColor,
+                printTarget, printMonths, allMonths, contactInfo, qrUrl1, qrUrl2, selectedMonthData, genQR, printNow,
+                isDBConnected, salesData, reportSales
+            };
+        }
+    }).mount('#app');
+</script>
+</body>
+</html>
