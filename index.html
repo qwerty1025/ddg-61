@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>點點綠排班戰略系統 v9.0 (雲端版)</title>
+    <title>點點綠排班戰略系統 v9.1 (雲端版)</title>
     
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -36,16 +36,12 @@
         .today-col-header { background-color: #fef08a !important; color: #854d0e !important; box-shadow: inset 0 -3px 0 #eab308; z-index: 25; }
         .today-col-cell { background-color: #fef9c3 !important; border-left: 1px solid #fde047; border-right: 1px solid #fde047; }
         
-        /* 視覺優化：士林綠廊與分區 */
+        /* 視覺優化：區域分色 */
         .station-group-bg-odd { background-color: #ffffff; }
         .station-group-bg-even { background-color: #f8fafc; }
         .shilin-bg { background-color: #f0fdf4 !important; }
+        .beitou-bg { background-color: #faf5ff !important; }
         .station-divider { border-top: 3px solid #334155 !important; }
-
-        /* 看板樣式 */
-        .kanban-col { flex: 1; min-width: 320px; background: #f1f5f9; border-radius: 8px; display: flex; flex-direction: column; overflow: hidden; border: 1px solid #e2e8f0; }
-        .shift-card { font-size: 0.7rem; padding: 2px 6px; margin-bottom: 2px; background: white; border-radius: 4px; border-left: 3px solid #cbd5e1; box-shadow: 0 1px 1px rgba(0,0,0,0.05); cursor: pointer; transition: all 0.1s; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-        .shift-card:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
 
         /* 四色戰隊 */
         .hl-red { background-color: #fef2f2 !important; color: #b91c1c; border-left-color: #ef4444 !important; font-weight: bold; }
@@ -77,12 +73,11 @@
     <header class="h-14 bg-slate-900 text-white flex items-center justify-between px-4 shadow-md z-50 shrink-0 no-print">
         <div class="flex items-center gap-4">
             <div class="flex items-center gap-2">
-                <div class="w-8 h-8 bg-emerald-500 rounded flex items-center justify-center font-bold text-white shadow-lg">v9</div>
+                <div class="w-8 h-8 bg-emerald-500 rounded flex items-center justify-center font-bold text-white shadow-lg">v9.1</div>
                 <h1 class="font-bold text-lg hidden md:block">排班戰略系統 <span v-if="isDBConnected" class="text-[10px] text-emerald-300 ml-1"><i class="fa-solid fa-cloud"></i> 已連線</span></h1>
             </div>
             
             <div class="bg-slate-800 p-1 rounded flex gap-1">
-                <button @click="currentView='kanban'" :class="navClass('kanban')" class="px-3 py-1 text-xs rounded transition"><i class="fa-solid fa-columns"></i> 看板</button>
                 <button @click="currentView='matrix'" :class="navClass('matrix')" class="px-3 py-1 text-xs rounded transition"><i class="fa-solid fa-table-cells"></i> 總表</button>
                 <button @click="currentView='analysis'" :class="navClass('analysis')" class="px-3 py-1 text-xs rounded transition"><i class="fa-solid fa-chart-pie"></i> 分析</button>
                 <button @click="currentView='myschedule'" :class="navClass('myschedule')" class="px-3 py-1 text-xs rounded transition bg-indigo-600 hover:bg-indigo-500 text-white font-bold"><i class="fa-solid fa-print"></i> 我的班表</button>
@@ -121,27 +116,6 @@
 
     <main class="flex-grow p-4 overflow-hidden relative bg-slate-100">
 
-        <div v-if="currentView === 'kanban'" class="h-full flex gap-3 overflow-x-auto pb-2">
-            <div v-for="drawer in drawers" :key="drawer.key" class="kanban-col shadow-sm">
-                <div class="p-3 border-b bg-white flex justify-between items-center sticky top-0 z-10">
-                    <div class="flex items-center gap-2"><div class="w-1.5 h-6 rounded-full" :class="drawer.colorClass"></div><span class="font-bold text-slate-700">{{ drawer.name }}區</span></div>
-                    <div class="text-[10px] text-slate-400 border rounded px-1">{{ getDrawerShiftCount(drawer.key) }}場</div>
-                </div>
-                <div class="overflow-y-auto custom-scrollbar flex-grow p-1 sync-scroll-target" @scroll="handleSyncScroll">
-                    <div v-for="week in calendarWeeks" :key="week.id" class="mb-1">
-                        <div v-if="week.isMonthStart" class="text-[10px] font-bold text-slate-400 pl-1 mt-2 mb-1 border-l-2 border-emerald-400">{{ week.monthLabel }}</div>
-                        <div class="grid grid-cols-5 gap-1">
-                            <div v-for="day in week.days" :key="day.dateStr" class="min-h-[80px] bg-white border border-slate-200 rounded p-1 hover:bg-slate-50 relative" :class="{'ring-2 ring-yellow-400': day.dateStr === todayStr}">
-                                <div class="text-[10px] mb-1" :class="day.dateStr === todayStr ? 'text-yellow-600 font-bold' : 'text-slate-300'">{{ day.dayNum }}</div>
-                                <div v-for="shift in getShifts(day.dateStr, drawer.key)" :key="shift.id" class="shift-card" :class="getComparisonColorClass(shift.staff)" @click="editShiftCard(shift)">{{ truncateName(shift.staff) }}</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="h-10"></div>
-                </div>
-            </div>
-        </div>
-
         <div v-if="currentView === 'matrix'" class="matrix-container custom-scrollbar" id="matrixContainer">
             <table class="matrix-table">
                 <thead>
@@ -156,14 +130,17 @@
                 <tbody>
                     <template v-for="(group, gIndex) in matrixGroups" :key="group.name">
                         <tr v-for="(row, rIndex) in group.rows" :key="row.station" 
-                            :class="[gIndex % 2 === 0 ? 'station-group-bg-odd' : 'station-group-bg-even', rIndex === 0 && gIndex !== 0 ? 'station-divider' : '', row.isShilin ? 'shilin-bg' : '']">
+                            :class="[gIndex % 2 === 0 ? 'station-group-bg-odd' : 'station-group-bg-even', rIndex === 0 && gIndex !== 0 ? 'station-divider' : '', row.isShilin ? 'shilin-bg' : '', row.isBeitou ? 'beitou-bg' : '']">
                             <td>
                                 <div class="flex items-center justify-between">
                                     <span>{{ row.station }}</span>
                                     <span v-if="rIndex === 0" class="text-[9px] px-1 rounded text-white font-bold" :class="group.badgeClass">{{ group.name }}</span>
                                 </div>
                             </td>
-                            <td v-for="(cell, i) in row.cells" :key="i" :class="[getComparisonColorClass(cell), matrixHeaders[i].date === todayStr ? 'today-col-cell' : '']">{{ cell }}</td>
+                            <td v-for="(cell, i) in row.cells" :key="i" :class="[getComparisonColorClass(cell), matrixHeaders[i].date === todayStr ? 'today-col-cell' : '']" @click="cell ? null : editEmptyCell(row.station, matrixHeaders[i].date)">
+                                <span v-if="cell">{{ cell }}</span>
+                                <span v-else class="opacity-0 hover:opacity-100 text-slate-300 text-[10px] cursor-pointer"><i class="fa-solid fa-plus"></i></span>
+                            </td>
                         </tr>
                     </template>
                 </tbody>
@@ -171,40 +148,42 @@
         </div>
 
         <div v-if="currentView === 'analysis'" class="h-full bg-white rounded-lg shadow overflow-hidden flex flex-col">
-            <div class="p-4 border-b bg-slate-50 flex justify-between">
-                <h3 class="font-bold text-slate-700">深度營運分析 (P1:11-1月 vs P2:2-4月)</h3>
-                <div class="text-xs text-slate-500">*綠色底代表 20場以上(85折)，藍色 10場以上(9折)</div>
+            <div class="p-4 border-b bg-slate-50 flex justify-between items-center">
+                <h3 class="font-bold text-slate-700">深度營運分析 (P1: 11~1月 | P2: 2~4月 | P3: 5~7月)</h3>
+                <div class="text-xs text-slate-500">*綠底: 總場次 20+ (85折) | 藍底: 總場次 10+ (9折)</div>
             </div>
             <div class="overflow-auto p-4 custom-scrollbar">
                 <table class="w-full text-xs text-left border-collapse">
-                    <thead class="bg-slate-100 sticky top-0 text-slate-500 uppercase">
+                    <thead class="bg-slate-100 sticky top-0 text-slate-500 uppercase z-10 shadow-sm">
                         <tr>
-                            <th class="px-3 py-2">排名</th>
-                            <th class="px-3 py-2">廠商名稱</th>
-                            <th class="px-3 py-2 text-center border-l">前期(P1)場次</th>
-                            <th class="px-3 py-2 text-center">後期(P2)場次</th>
-                            <th class="px-3 py-2 text-center border-r">成長率</th>
-                            <th class="px-3 py-2 text-center text-amber-700 bg-amber-50">P1 分佈 (雙/士/石)</th>
-                            <th class="px-3 py-2 text-center text-emerald-700 bg-emerald-50">P2 分佈 (雙/士/石)</th>
-                            <th class="px-3 py-2 text-right border-l">P1 營收</th>
-                            <th class="px-3 py-2 text-right">P2 營收</th>
-                            <th class="px-3 py-2 text-right font-bold bg-slate-50">總營收預估</th>
+                            <th class="px-2 py-2">排名</th>
+                            <th class="px-2 py-2">廠商名稱</th>
+                            <th class="px-2 py-2 text-center border-l bg-slate-200/50">P1 場次</th>
+                            <th class="px-2 py-2 text-center bg-slate-200/50">P2 場次</th>
+                            <th class="px-2 py-2 text-center border-r bg-slate-200/50">P3 場次</th>
+                            <th class="px-2 py-2 text-center text-amber-700 bg-amber-50">P1 分佈 (雙/士/石/北)</th>
+                            <th class="px-2 py-2 text-center text-emerald-700 bg-emerald-50">P2 分佈 (雙/士/石/北)</th>
+                            <th class="px-2 py-2 text-center text-purple-700 bg-purple-50">P3 分佈 (雙/士/石/北)</th>
+                            <th class="px-2 py-2 text-right border-l text-slate-400">P1 營收</th>
+                            <th class="px-2 py-2 text-right text-slate-500">P2 營收</th>
+                            <th class="px-2 py-2 text-right text-slate-600 border-r">P3 營收</th>
+                            <th class="px-2 py-2 text-right font-bold bg-slate-50 text-emerald-700">總營收預估</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
                         <tr v-for="(stat, idx) in analysisStats" :key="stat.name" :class="getRowColor(stat.tier)">
-                            <td class="px-3 py-2 font-mono text-slate-400">{{ idx+1 }}</td>
-                            <td class="px-3 py-2 font-bold">{{ stat.name }}</td>
-                            <td class="px-3 py-2 text-center border-l">{{ stat.p1Count }}</td>
-                            <td class="px-3 py-2 text-center font-bold">{{ stat.p2Count }}</td>
-                            <td class="px-3 py-2 text-center border-r">
-                                <span :class="stat.growth >= 0 ? 'text-green-600' : 'text-red-500'">{{ stat.growth }}%</span>
-                            </td>
-                            <td class="px-3 py-2 text-center font-mono text-[10px] bg-amber-50/30">{{ stat.p1Dist }}</td>
-                            <td class="px-3 py-2 text-center font-mono text-[10px] bg-emerald-50/30">{{ stat.p2Dist }}</td>
-                            <td class="px-3 py-2 text-right border-l text-slate-400">${{ stat.p1Rev.toLocaleString() }}</td>
-                            <td class="px-3 py-2 text-right font-bold text-slate-600">${{ stat.p2Rev.toLocaleString() }}</td>
-                            <td class="px-3 py-2 text-right font-bold text-emerald-700 bg-slate-50">${{ stat.totalRev.toLocaleString() }}</td>
+                            <td class="px-2 py-2 font-mono text-slate-400">{{ idx+1 }}</td>
+                            <td class="px-2 py-2 font-bold">{{ stat.name }}</td>
+                            <td class="px-2 py-2 text-center border-l text-slate-500">{{ stat.p1Count }}</td>
+                            <td class="px-2 py-2 text-center font-bold text-slate-700">{{ stat.p2Count }}</td>
+                            <td class="px-2 py-2 text-center font-bold text-purple-600 border-r">{{ stat.p3Count }}</td>
+                            <td class="px-2 py-2 text-center font-mono text-[10px] bg-amber-50/30">{{ stat.p1Dist }}</td>
+                            <td class="px-2 py-2 text-center font-mono text-[10px] bg-emerald-50/30">{{ stat.p2Dist }}</td>
+                            <td class="px-2 py-2 text-center font-mono text-[10px] bg-purple-50/30">{{ stat.p3Dist }}</td>
+                            <td class="px-2 py-2 text-right border-l text-slate-400">${{ stat.p1Rev.toLocaleString() }}</td>
+                            <td class="px-2 py-2 text-right text-slate-500">${{ stat.p2Rev.toLocaleString() }}</td>
+                            <td class="px-2 py-2 text-right font-bold text-purple-600 border-r">${{ stat.p3Rev.toLocaleString() }}</td>
+                            <td class="px-2 py-2 text-right font-bold text-emerald-700 bg-slate-50">${{ stat.totalRev.toLocaleString() }}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -313,14 +292,92 @@
     const { createApp, ref, computed, onMounted, nextTick } = Vue;
 
     // 您的 CSV 預設資料 (作爲空資料庫的種子資料)
-    const defaultCSV = `站名 / 日期,11/3（一）,11/04（二）,11/05（三）,11/06（四）,11/07（五）,11/10（一）,11/11（二）,11/12（三）,11/13（四）,11/14（五）,11/17（一）,11/18（二）,11/19（三）,11/20（四）,11/21（五）,11/24（一）,11/25（二）,11/26（三）,11/27（四）,11/28（五）,12/01（一）,12/02（二）,12/03（三）,12/04（四）,12/05（五）,12/08（一）,12/09（二）,12/10（三）,12/11（四）,12/12（五）,12/15（一）,12/16（二）,12/17（三）,12/18（四）,12/19（五）,12/22（一）,12/23 （二）,12/24（三）,12/25（四）,12/26（五）,12/29（一）,12/30（二）,12/31（三）,01/01（四）,01/02（五）,01/05（一）,01/06（二）,01/07（三）,01/08（四）,01/09（五）,01/12（一）,01/13（二）,01/14（三）,01/15（四）,01/16（五）,01/19（一）,01/20（二）,01/21（三）,01/22（四）,01/23（五）,01/26（一）,01/27（二）,01/28（三）,01/29（四）,01/30（五）,02/02（一）,02/03（二）,02/04（三）,02/05（四）,02/06（五）,02/09（一）,02/10（二）,02/11（三）,02/12（四）,02/13（五）,02/23（一）,02/24（二）,02/25（三）,02/26（四）,02/27（五）,03/02（一）,03/03（二）,03/04（三）,03/05（四）,03/06（五）,03/09（一）,03/10（二）,03/11（三）,03/12（四）,03/13（五）,03/16（一）,03/17（二）,03/18（三）,03/19（四）,03/20（五）,03/23（一）,03/24（二）,03/25（三）,03/26（四）,03/27（五）,03/30（一）,03/31（二）,04/01（三）,04/02（四）,04/03（五）,04/06（一）,04/07（二）,04/08（三）,04/09（四）,04/10（五）,04/13（一）,04/14（二）,04/15（三）,04/16（四）,04/17（五）,04/20（一）,04/21（二）,04/22（三）,04/23（四）,04/24（五）,04/27（一）,04/28（二）,04/29（三）,04/30（四）
-雙連一,御品園放牧雞蛋,輝鴻有機農場,花蓮晴盛蜂場,樂穠,饅實在小舖,御品園放牧雞蛋,DIVA の吃貨棧,輝要有機菜園,樂穠,樂穠,御品園放牧雞蛋,輝鴻有機農場,修賢養蜂場,樂穠,川桑果園,瑞田有機農場,DIVA の吃貨棧,修賢養蜂場,瑞田有機農場,饅實在小舖,瑞田有機農場,雅芯香草園,修賢養蜂場,瑞田有機農場,川桑果園,御品園放牧雞蛋,DIVA の吃貨棧,修賢養蜂場,樂穠,川桑果園,御品園放牧雞蛋,永昇甘蔗,修賢養蜂場,樂穠,川桑果園,御品園放牧雞蛋,DIVA の吃貨棧,修賢養蜂場,樂穠,川桑果園,瑞田有機農場,永昇甘蔗,修賢養蜂場,松滿緣有機農場,川桑果園,御品園放牧雞蛋,永昇甘蔗,御品園放牧雞蛋,瑞田有機農場,川桑果園,御品園放牧雞蛋,DIVA の吃貨棧,御品園放牧雞蛋,樂穠,川桑果園,御品園放牧雞蛋,永昇甘蔗,御品園放牧雞蛋,瑞田有機農場,樂穠,御品園放牧雞蛋,DIVA の吃貨棧,御品園放牧雞蛋,樂穠,樂穠,瑞田農場,文獻農場,川桑果園,瑞田農場,樂穠,瑞田農場,雅芯香草園,輝要有機菜園,樂穠,川桑果園,雅芯香草園,阿財綠竹農場,雅芯香草園,樂穠,川桑果園,瑞田農場,文獻農場,輝要有機菜園,樂穠,饅實在小舖,瑞田農場,DIVA の 吃貨棧,阿財綠竹農場,樂穠,樂穠,瑞田農場,雅芯香草園,301farm農場,雅芯香草園,饅實在小舖,瑞田農場,,阿財綠竹農場,樂穠,川桑果園,瑞田農場,文獻農場,輝要有機菜園,樂穠,饅實在小舖,瑞田農場,阿財綠竹農場,阿財綠竹農場,樂穠,饅實在小舖,瑞田農場,雅芯香草園,,雅芯香草園,饅實在小舖,瑞田農場,輝鴻有機農場,阿財綠竹農場,樂穠,饅實在小舖,瑞田農場,DIVA の 吃貨棧,阿財綠竹農場,樂穠`;
+    const defaultCSV = `站名 / 日期,11/3（一）,11/04（二）,11/05（三）,11/06（四）,11/07（五）,11/10（一）,11/11（二）,11/12（三）,11/13（四）,11/14（五）,11/17（一）,11/18（二）,11/19（三）,11/20（四）,11/21（五）,11/24（一）,11/25（二）,11/26（三）,11/27（四）,11/28（五）,12/01（一）,12/02（二）,12/03（三）,12/04（四）,12/05（五）,12/08（一）,12/09（二）,12/10（三）,12/11（四）,12/12（五）,12/15（一）,12/16（二）,12/17（三）,12/18（四）,12/19（五）,12/22（一）,12/23 （二）,12/24（三）,12/25（四）,12/26（五）,12/29（一）,12/30（二）,12/31（三）,01/01（四）,01/02（五）,01/05（一）,01/06（二）,01/07（三）,01/08（四）,01/09（五）,01/12（一）,01/13（二）,01/14（三）,01/15（四）,01/16（五）,01/19（一）,01/20（二）,01/21（三）,01/22（四）,01/23（五）,01/26（一）,01/27（二）,01/28（三）,01/29（四）,01/30（五）,02/02（一）,02/03（二）,02/04（三）,02/05（四）,02/06（五）,02/09（一）,02/10（二）,02/11（三）,02/12（四）,02/13（五）,02/23（一）,02/24（二）,02/25（三）,02/26（四）,02/27（五）,03/02（一）,03/03（二）,03/04（三）,03/05（四）,03/06（五）,03/09（一）,03/10（二）,03/11（三）,03/12（四）,03/13（五）,03/16（一）,03/17（二）,03/18（三）,03/19（四）,03/20（五）,03/23（一）,03/24（二）,03/25（三）,03/26（四）,03/27（五）,03/30（一）,03/31（二）,04/01（三）,04/02（四）,04/03（五）,04/06（一）,04/07（二）,04/08（三）,04/09（四）,04/10（五）,04/13（一）,04/14（二）,04/15（三）,04/16（四）,04/17（五）,04/20（一）,04/21（二）,04/22（三）,04/23（四）,04/24（五）,04/27（一）,04/28（二）,04/29（三）,04/30（四）,"05/01
+星期五","05/04
+星期一","05/05
+星期二","05/06
+星期三","05/07
+星期四","05/08
+星期五","05/11
+星期一","05/12
+星期二","05/13
+星期三","05/14
+星期四","05/15
+星期五","05/18
+星期一","05/19
+星期二","05/20
+星期三","05/21
+星期四","05/22
+星期五","05/25
+星期一","05/26
+星期二","05/27
+星期三","05/28
+星期四","05/29
+星期五","06/01
+星期一","06/02
+星期二","06/03
+星期三","06/04
+星期四","06/05
+星期五","06/08
+星期一","06/09
+星期二","06/10
+星期三","06/11
+星期四","06/12
+星期五","06/15
+星期一","06/16
+星期二","06/17
+星期三","06/18
+星期四","06/19
+星期五","06/22
+星期一","06/23
+星期二","06/24
+星期三","06/25
+星期四","06/26
+星期五","06/29
+星期一","06/30
+星期二","07/01
+星期三","07/02
+星期四","07/03
+星期五","07/06
+星期一","07/07
+星期二","07/08
+星期三","07/09
+星期四","07/10
+星期五","07/13
+星期一","07/14
+星期二","07/15
+星期三","07/16
+星期四","07/17
+星期五","07/20
+星期一","07/21
+星期二","07/22
+星期三","07/23
+星期四","07/24
+星期五","07/27
+星期一","07/28
+星期二","07/29
+星期三","07/30
+星期四","07/31
+星期五"
+雙連一,御品園放牧雞蛋,輝鴻有機農場,晴盛養蜂場,樂穠,饅實在小舖,御品園放牧雞蛋,DIVA の 吃貨棧,輝要有機菜園,樂穠,樂穠,御品園放牧雞蛋,輝鴻有機農場,修賢養蜂場,樂穠,川桑果園,瑞田有機農場,DIVA の 吃貨棧,修賢養蜂場,瑞田有機農場,饅實在小舖,瑞田有機農場,雅芯香草園,修賢養蜂場,瑞田有機農場,川桑果園,御品園放牧雞蛋,DIVA の 吃貨棧,修賢養蜂場,樂穠,川桑果園,御品園放牧雞蛋,永昇甘蔗,修賢養蜂場,樂穠,川桑果園,御品園放牧雞蛋,DIVA の 吃貨棧,修賢養蜂場,樂穠,川桑果園,瑞田有機農場,永昇甘蔗,修賢養蜂場,松滿緣有機農場,川桑果園,御品園放牧雞蛋,永昇甘蔗,御品園放牧雞蛋,瑞田有機農場,川桑果園,御品園放牧雞蛋,DIVA の 吃貨棧,御品園放牧雞蛋,樂穠,川桑果園,御品園放牧雞蛋,永昇甘蔗,御品園放牧雞蛋,瑞田有機農場,樂穠,御品園放牧雞蛋,DIVA の 吃貨棧,御品園放牧雞蛋,樂穠,樂穠,瑞田有機農場,文獻農場,川桑果園,瑞田有機農場,樂穠,瑞田有機農場,雅芯香草園,輝要有機菜園,樂穠,川桑果園,雅芯香草園,阿財綠竹農場,雅芯香草園,樂穠,,瑞田有機農場,文獻農場,輝要有機菜園,樂穠,饅實在小舖,瑞田有機農場,DIVA の 吃貨棧,阿財綠竹農場,樂穠,樂穠,瑞田有機農場,雅芯香草園,301farm農場,雅芯香草園,饅實在小舖,瑞田有機農場,,阿財綠竹農場,樂穠,川桑果園,瑞田有機農場,文獻農場,輝要有機菜園,樂穠,饅實在小舖,瑞田有機農場,阿財綠竹農場,阿財綠竹農場,樂穠,饅實在小舖,瑞田有機農場,雅芯香草園,,雅芯香草園,饅實在小舖,瑞田有機農場,輝鴻有機農場,阿財綠竹農場,樂穠,饅實在小舖,瑞田有機農場,DIVA の 吃貨棧,阿財綠竹農場,樂穠,樂穠,御品園放牧雞蛋,文獻農場,臺北有農(臺北市農村),雅芯香草園,樂穠,御品園放牧雞蛋,DIVA の 吃貨棧,輝要有機菜園,臺北有農(臺北市農村),樂穠,雅芯香草園,文獻農場,雅芯香草園,吉米農場,樂穠,清淨母語,永昇甘蔗,輝要有機菜園,臺北有農(臺北市農村),川桑果園,御品園放牧雞蛋,文獻農場,輝要有機菜園,臺北有農(臺北市農村),川桑果園,御品園放牧雞蛋,永昇甘蔗,松滿緣有機農場,吉米農場,樂穠,御品園放牧雞蛋,文獻農場,DIVA の 吃貨棧,臺北有農(臺北市農村),川桑果園,御品園放牧雞蛋,永昇甘蔗,輝要有機菜園,雅芯香草園,川桑果園,清淨母語,永昇甘蔗,輝要有機菜園,吉米農場,川桑果園,御品園放牧雞蛋,DIVA の 吃貨棧,輝要有機菜園,雅芯香草園,川桑果園,御品園放牧雞蛋,301farm農場,輝要有機菜園,臺北有農(臺北市農村),川桑果園,御品園放牧雞蛋,文獻農場,御品園放牧雞蛋,臺北有農(臺北市農村),川桑果園,清淨母語,永昇甘蔗,輝要有機菜園,臺北有農(臺北市農村),川桑果園
+雙連二,清淨母語,永昇甘蔗,御品園放牧雞蛋,,樂穠,饅實在小舖,雅芯香草園,御品園放牧雞蛋,瑞田有機農場,部落e購,饅實在小舖,松滿緣有機農場,301farm農場,瑞田有機農場,饅實在小舖,御品園放牧雞蛋,輝鴻有機農場,御品園放牧雞蛋,樂穠,樂穠,御品園放牧雞蛋,永昇甘蔗,御品園放牧雞蛋,樂穠,樂穠,饅實在小舖,永昇甘蔗,御品園放牧雞蛋,瑞田有機農場,饅實在小舖,瑞田有機農場,文獻農場,御品園放牧雞蛋,瑞田有機農場,饅實在小舖,饅實在小舖,雅芯香草園,301farm農場,雅芯香草園,饅實在小舖,御品園放牧雞蛋,,御品園放牧雞蛋,,,瑞田有機農場,,輝要有機菜園,樂穠,樂穠,瑞田有機農場,雅芯香草園,輝要有機菜園,瑞田有機農場,樂穠,瑞田有機農場,,輝要有機菜園,樂穠,部落e購,瑞田有機農場,永昇甘蔗,輝要有機菜園,瑞田有機農場,部落e購,御品園放牧雞蛋,晴盛養蜂場,輝要有機菜園,樂穠,,文獻農場,輝鴻有機農場,御品園放牧雞蛋,瑞田有機農場,樂穠,瑞田有機農場,,輝要有機菜園,瑞田有機農場,饅實在小舖,御品園放牧雞蛋,,御品園放牧雞蛋,瑞田有機農場,樂穠,,,輝要有機菜園,瑞田有機農場,饅實在小舖,御品園放牧雞蛋,文獻農場,松滿緣有機農場,樂穠,樂穠,清淨母語,輝鴻有機農場,輝要有機菜園,瑞田有機農場,饅實在小舖,御品園放牧雞蛋,DIVA の 吃貨棧,御品園放牧雞蛋,瑞田有機農場,樂穠,清淨母語,輝鴻有機農場,輝要有機菜園,瑞田有機農場,樂穠,御品園放牧雞蛋,,輝要有機菜園,樂穠,樂穠,清淨母語,永昇甘蔗,輝要有機菜園,瑞田有機農場,樂穠,御品園放牧雞蛋,輝鴻有機農場,輝要有機菜園,瑞田有機農場,饅實在小舖,瑞田有機農場,永昇甘蔗,輝要有機菜園,樂穠,饅實在小舖,瑞田有機農場,永昇甘蔗,御品園放牧雞蛋,樂穠,饅實在小舖,御品園放牧雞蛋,永昇甘蔗,輝要有機菜園,臺北有農(臺北市農村),饅實在小舖,御品園放牧雞蛋,輝鴻有機農場,御品園放牧雞蛋,樂穠,松滿緣有機農場,瑞田有機農場,永昇甘蔗,御品園放牧雞蛋,樂穠,樂穠,瑞田有機農場,雅芯香草園,輝要有機菜園,雅芯香草園,川桑果園,瑞田有機農場,永昇甘蔗,輝要有機菜園,樂穠,樂穠,瑞田有機農場,雅芯香草園,御品園放牧雞蛋,臺北有農(臺北市農村),松滿緣有機農場,御品園放牧雞蛋,輝鴻有機農場,御品園放牧雞蛋,臺北有農(臺北市農村),樂穠,瑞田有機農場,文獻農場,御品園放牧雞蛋,臺北有農(臺北市農村),樂穠,瑞田有機農場,永昇甘蔗,御品園放牧雞蛋,樂穠,樂穠,瑞田有機農場,永昇甘蔗,德玉茶園,樂穠,樂穠,御品園放牧雞蛋,輝鴻有機農場,御品園放牧雞蛋,樂穠,松滿緣有機農場
+雙連三,修賢養蜂場,,輝要有機菜園,,部落e購,,輝鴻有機農場,修賢養蜂場,雅芯香草園,,瑞田有機農場,永昇甘蔗,五寮尖山羊乳,雅芯香草園,樂穠,,文獻農場,輝要有機菜園,阿財綠竹農場,晴盛養蜂場,饅實在小舖,,輝要有機菜園,雅芯香草園,,瑞田有機農場,,輝要有機菜園,,樂穠,,,輝要有機菜園,,樂穠,瑞田有機農場,永昇甘蔗,御品園放牧雞蛋,,樂穠,清淨母語,,輝要有機菜園,,,,,,,,,松滿緣有機農場,,雅芯香草園,,,,五寮尖山羊乳,,,清淨母語,,,松滿緣有機農場,,,永昇甘蔗,御品園放牧雞蛋,,,御品園放牧雞蛋,永昇甘蔗,,,,御品園放牧雞蛋,,御品園放牧雞蛋,,樂穠,,輝鴻有機農場,饅實在小舖,,川桑果園,御品園放牧雞蛋,輝鴻有機農場,御品園放牧雞蛋,日心農場,川桑果園,,,輝要有機菜園,瑞田有機農場,川桑果園,御品園放牧雞蛋,永昇甘蔗,御品園放牧雞蛋,吉米農場,樂穠,,輝鴻有機農場,饅實在小舖,吉米農場,,御品園放牧雞蛋,永昇甘蔗,御品園放牧雞蛋,,,,DIVA の 吃貨棧,御品園放牧雞蛋,,,御品園放牧雞蛋,,御品園放牧雞蛋,,,,永昇甘蔗,御品園放牧雞蛋,,,饅實在小舖,雅芯香草園,御品園放牧雞蛋,瑞田有機農場,呷米,,輝鴻有機農場,饅實在小舖,瑞田有機農場,五寮尖山羊乳,瑞田有機農場,輝鴻有機農場,御品園放牧雞蛋,樂穠,,瑞田有機農場,,饅實在小舖,瑞田有機農場,樂穠,,輝鴻有機農場,饅實在小舖,瑞田有機農場,饅實在小舖,,輝鴻有機農場,御品園放牧雞蛋,樂穠,臺北有農(臺北市農村),瑞田有機農場,輝鴻有機農場,御品園放牧雞蛋,瑞田有機農場,饅實在小舖,,輝鴻有機農場,饅實在小舖,樂穠,樂穠,瑞田有機農場,,,樂穠,,,永昇甘蔗,德玉茶園,樂穠,,,輝鴻有機農場,德玉茶園,瑞田有機農場,饅實在小舖,,輝鴻有機農場,,瑞田有機農場,,瑞田有機農場,,,瑞田有機農場,樂穠
+雙連四,,,,,御品園放牧雞蛋,,永昇甘蔗,文獻農場,阿財綠竹農場,,清淨母語,,輝要有機菜園,,阿財綠竹農場,,永昇甘蔗,,,川桑果園,清淨母語,,,,,,,,,松滿緣有機農場,,,文獻農場,,,,,輝要有機菜園,,,,,,,,,,,,,,永昇甘蔗,,,,,,,,,,,,,,小潘農場,輝鴻有機農場,,,,,,,,,,,,,,,永昇甘蔗,,,,,永昇甘蔗,小潘農場,,,,輝鴻有機農場,御品園放牧雞蛋,,,,,,,,,永昇甘蔗,,清淨母語,川桑果園,,,,,川桑果園,,輝鴻有機農場,,,,,,,,,,,小潘農場,,,,輝鴻有機農場,,清淨母語,川桑果園,,,,301farm農場,,,,文獻農場,瑞田有機農場,,,,,雅芯香草園,饅實在小舖,,,,人山艸,御品園放牧雞蛋,,,饅實在小舖,瑞田有機農場,饅實在小舖,,,五寮尖山羊乳,人山艸,,,,,瑞田有機農場,饅實在小舖,,,,瑞田有機農場,,,輝鴻有機農場,,瑞田有機農場,,,,,,,,,,,,,,,,饅實在小舖
+雙連五,,,,,,,,,,,,,御品園放牧雞蛋,,,,,,,,,,,,,,,,,,,,五寮尖山羊乳,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,永昇甘蔗,,,,,,,,,,,301farm農場,,,,,,,,,永昇甘蔗,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+士林一,饅實在小舖,晴盛養蜂場,饅實在小舖,力凡「米」烘焙,御品園放牧雞蛋,松滿緣有機農場,文獻農場,饅實在小舖,人山艸,御品園放牧雞蛋,瑞田有機農場,雅芯香草園,饅實在小舖,力凡「米」烘焙,御品園放牧雞蛋,瑞田有機農場,,饅實在小舖,晴盛養蜂場,御品園放牧雞蛋,瑞田有機農場,,饅實在小舖,人山艸,御品園放牧雞蛋,瑞田有機農場,雅芯香草園,饅實在小舖,雅芯香草園,,饅實在小舖,,饅實在小舖,力凡「米」烘焙,美好の食物,瑞田有機農場,,力凡「米」烘焙,吉米農場,御品園放牧雞蛋,瑞田有機農場,雅芯香草園,饅實在小舖,雅芯香草園,御品園放牧雞蛋,瑞田有機農場,,301farm農場,力凡「米」烘焙,御品園放牧雞蛋,瑞田有機農場,,部落e購,,御品園放牧雞蛋,瑞田有機農場,雅芯香草園,部落e購,力凡「米」烘焙,御品園放牧雞蛋,瑞田有機農場,,部落e購,,御品園放牧雞蛋,松滿緣有機農場,瑞田有機農場,部落e購,,御品園放牧雞蛋,瑞田有機農場,瑞田有機農場,部落e購,清淨母語,御品園放牧雞蛋,瑞田有機農場,瑞田有機農場,部落e購,力凡「米」烘焙,御品園放牧雞蛋,清淨母語,瑞田有機農場,部落e購,,御品園放牧雞蛋,瑞田有機農場,瑞田有機農場,部落e購,力凡「米」烘焙,松滿緣有機農場,瑞田有機農場,瑞田有機農場,部落e購,阿財綠竹農場,御品園放牧雞蛋,瑞田有機農場,雅芯香草園,部落e購,雅芯香草園,御品園放牧雞蛋,瑞田有機農場,瑞田有機農場,人山艸,部落e購,御品園放牧雞蛋,瑞田有機農場,瑞田有機農場,部落e購,阿財綠竹農場,御品園放牧雞蛋,瑞田有機農場,,部落e購,阿財綠竹農場,五寮尖山羊乳,文獻農場,雅芯香草園,部落e購,雅芯香草園,御品園放牧雞蛋,瑞田有機農場,瑞田有機農場,部落e購,阿財綠竹農場,川桑果園,臺北有農(臺北市農村),人山艸,文獻農場,麥莉貝果,川桑果園,清淨母語,人山艸,日心農場,力凡「米」烘焙,川桑果園,臺北有農(臺北市農村),人山艸,DIVA の 吃貨棧,五寮尖山羊乳,川桑果園,松滿緣有機農場,人山艸,日心農場,力凡「米」烘焙,Wholesome 好•好酸麵包,清淨母語,人山艸,文獻農場,力凡「米」烘焙,川桑果園,臺北有農(臺北市農村),人山艸,日心農場,部落e購,川桑果園,力凡「米」烘焙,人山艸,文獻農場,部落e購,川桑果園,松滿緣有機農場,人山艸,日心農場,瑞田有機農場,Wholesome 好•好酸麵包,松滿緣有機農場,人山艸,清淨母語,臺北有農(臺北市農村),部落e購,清淨母語,人山艸,文獻農場,力凡「米」烘焙,呷米,臺北有農(臺北市農村),人山艸,力凡「米」烘焙,吉米農場,部落e購,臺北有農(臺北市農村),人山艸,部落e購,雅芯香草園,呷米,臺北有農(臺北市農村),人山艸,清淨母語,部落e購,Wholesome 好•好酸麵包
+士林二,,,阿財綠竹農場,人山艸,五寮尖山羊乳,清淨母語,修賢養蜂場,阿財綠竹農場,吉米農場,五寮尖山羊乳,,,阿財綠竹農場,晴盛養蜂場,松滿緣有機農場,清淨母語,,文獻農場,人山艸,川桑果園,清淨母語,,部落e購,,安工坊烘焙,松滿緣有機農場,,清淨母語,吉米農場,御品園放牧雞蛋,瑞田有機農場,,清淨母語,DIVA の 吃貨棧,御品園放牧雞蛋,,,饅實在小舖,,清淨母語,饅實在小舖,,文獻農場,,,,,部落e購,人山艸,五寮尖山羊乳,松滿緣有機農場,,,人山艸,部落e購,,,,雅芯香草園,,,,,人山艸,,瑞田有機農場,,饅實在小舖,,,清淨母語,呷米,吉米農場,人山艸,部落e購,呷米,洛小果農場,饅實在小舖,五寮尖山羊乳,,瑞田有機農場,川桑果園,,吉米農場,川桑果園,清淨母語,呷米,饅實在小舖,阿財綠竹農場,御品園放牧雞蛋,清淨母語,呷米,饅實在小舖,吉米農場,川桑果園,,瑞田有機農場,饅實在小舖,力凡「米」烘焙,清淨母語,饅實在小舖,,力凡「米」烘焙,阿財綠竹農場,,饅實在小舖,,饅實在小舖,人山艸,五寮尖山羊乳,清淨母語,松滿緣有機農場,饅實在小舖,吉米農場,御品園放牧雞蛋,瑞田有機農場,瑞田有機農場,饅實在小舖,力凡「米」烘焙,清淨母語,清淨母語,呷米,饅實在小舖,松滿緣有機農場,御品園放牧雞蛋,瑞田有機農場,,部落e購,五寮尖山羊乳,日心農場,臺北有農(臺北市農村),呷米,部落e購,人山艸,呷米,瑞田有機農場,日心農場,清淨母語,人山艸,安工坊烘焙,臺北有農(臺北市農村),呷米,清淨母語,麥莉貝果,川桑果園,臺北有農(臺北市農村),雅芯香草園,部落e購,吉米農場,日心農場,瑞田有機農場,呷米,清淨母語,日心農場,呷米,臺北有農(臺北市農村),呷米,部落e購,301farm農場,日心農場,臺北有農(臺北市農村),呷米,清淨母語,麥莉貝果,川桑果園,臺北有農(臺北市農村),瑞田有機農場,臺北有農(臺北市農村),瑞田有機農場,御品園放牧雞蛋,臺北有農(臺北市農村),呷米,部落e購,五寮尖山羊乳,御品園放牧雞蛋,瑞田有機農場,雅芯香草園,臺北有農(臺北市農村),松滿緣有機農場,御品園放牧雞蛋,瑞田有機農場,呷米,臺北有農(臺北市農村),五寮尖山羊乳,御品園放牧雞蛋,瑞田有機農場,松滿緣有機農場,部落e購,挑實｜酸種麵包,御品園放牧雞蛋
+士林三,,,部落e購,,,,,部落e購,,,,,清淨母語,人山艸,部落e購,,,部落e購,吉米農場,五寮尖山羊乳,,,,,五寮尖山羊乳,,,部落e購,,,清淨母語,,部落e購,,松滿緣有機農場,,,松滿緣有機農場,,,,,,,,,,,部落e購,,清淨母語,,,,,,,,人山艸,,,,,,,清淨母語,,文獻農場,,,饅實在小舖,,饅實在小舖,雅芯香草園,,,人山艸,松滿緣有機農場,人山艸,呷米,,阿財綠竹農場,文獻農場,松滿緣有機農場,呷米,臺北有農(臺北市農村),阿財綠竹農場,,人山艸,川桑果園,,阿財綠竹農場,文獻農場,人山艸,,,阿財綠竹農場,,阿財綠竹農場,,清淨母語,,饅實在小舖,DIVA の 吃貨棧,,,,,部落e購,,,,,人山艸,,,,,阿財綠竹農場,,,,,人山艸,松滿緣有機農場,,,臺北有農(臺北市農村),部落e購,清淨母語,瑞田有機農場,松滿緣有機農場,臺北有農(臺北市農村),臺北有農(臺北市農村),御品園放牧雞蛋,饅實在小舖,,部落e購,部落e購,呷米,瑞田有機農場,,部落e購,DIVA の 吃貨棧,呷米,瑞田有機農場,,臺北有農(臺北市農村),雅芯香草園,松滿緣有機農場,牧蜂農莊,,部落e購,五寮尖山羊乳,御品園放牧雞蛋,瑞田有機農場,,麥莉貝果,清淨母語,御品園放牧雞蛋,瑞田有機農場,,部落e購,部落e購,五寮尖山羊乳,瑞田有機農場,松滿緣有機農場,饅實在小舖,人山艸,松滿緣有機農場,瑞田有機農場,川桑果園,臺北有農(臺北市農村),部落e購,,,瑞田有機農場,,饅實在小舖,麥莉貝果,饅實在小舖,雅芯香草園,饅實在小舖,人山艸,,,,臺北有農(臺北市農村),,
+士林四,,,,,,,,清淨母語,,,,,部落e購,部落e購,五寮尖山羊乳,,,清淨母語,,,,,,,,,,,,,,,,,五寮尖山羊乳,,,部落e購,,,,,,,,,,,,,,,,,,,,,,,,,,,,日盛聯合,,,,,,,呷米,,呷米,,,洛小果農場,部落e購,,,,饅實在小舖,人山艸,,,,,部落e購,,,,呷米,清淨母語,,,,,人山艸,,,,文獻農場,松滿緣有機農場,,,,,DIVA の 吃貨棧,,,,,,,,,,人山艸,,,,,清淨母語,,,,饅實在小舖,人山艸,御品園放牧雞蛋,,,,部落e購,安工坊烘焙,牧蜂農莊,,臺北有農(臺北市農村),臺北有農(臺北市農村),,清淨母語,,臺北有農(臺北市農村),部落e購,御品園放牧雞蛋,牧蜂農莊,,德玉茶園,部落e購,五寮尖山羊乳,,,臺北有農(臺北市農村),挑實｜酸種麵包,301farm農場,饅實在小舖,,臺北有農(臺北市農村),臺北有農(臺北市農村),五寮尖山羊乳,,,臺北有農(臺北市農村),臺北有農(臺北市農村),御品園放牧雞蛋,饅實在小舖,,,,,,,,,,,,,,,,,,,,,,,,
+石牌一,輝要有機菜園,修賢養蜂場,Wholesome 好•好酸麵包,DIVA の 吃貨棧,川桑果園,牧蜂農莊,阿財綠竹農場,Wholesome 好•好酸麵包,瑞田有機農場,川桑果園,輝要有機菜園,修賢養蜂場,小潘農場,瑞田有機農場,川桑果園,輝要有機菜園,修賢養蜂場,Wholesome 好•好酸麵包,雅芯香草園,呷米,牧蜂農莊,修賢養蜂場,Wholesome 好•好酸麵包,DIVA の 吃貨棧,川桑果園,輝要有機菜園,修賢養蜂場,Wholesome 好•好酸麵包,瑞田有機農場,安工坊烘焙,牧蜂農莊,修賢養蜂場,Wholesome 好•好酸麵包,部落e購,呷米,牧蜂農莊,修賢養蜂場,小潘農場,瑞田有機農場,川桑果園,牧蜂農莊,修賢養蜂場,301farm農場,瑞田有機農場,川桑果園,輝要有機菜園,雅芯香草園,Wholesome 好•好酸麵包,,川桑果園,輝要有機菜園,人山艸,Wholesome 好•好酸麵包,瑞田有機農場,川桑果園,輝要有機菜園,人山艸,Wholesome 好•好酸麵包,,御品園放牧雞蛋,輝要有機菜園,雅芯香草園,Wholesome 好•好酸麵包,瑞田有機農場,御品園放牧雞蛋,饅實在小舖,雅芯香草園,古乙伯苦茶油,雅芯香草園,呷米,清淨母語,DIVA の 吃貨棧,古乙伯苦茶油,臺北有農(臺北市農村),五寮尖山羊乳,饅實在小舖,呷米,Wholesome 好•好酸麵包,松滿緣有機農場,川桑果園,饅實在小舖,雅芯香草園,古乙伯苦茶油,雅芯香草園,松滿緣有機農場,饅實在小舖,雅芯香草園,古乙伯苦茶油,雅芯香草園,五寮尖山羊乳,饅實在小舖,人山艸,古乙伯苦茶油,部落e購,呷米,力凡「米」烘焙,呷米,古乙伯苦茶油,部落e購,呷米,松滿緣有機農場,雅芯香草園,古乙伯苦茶油,雅芯香草園,呷米,臺北有農(臺北市農村),雅芯香草園,古乙伯苦茶油,雅芯香草園,呷米,饅實在小舖,呷米,Wholesome 好•好酸麵包,部落e購,呷米,力凡「米」烘焙,呷米,古乙伯苦茶油,部落e購,呷米,饅實在小舖,雅芯香草園,古乙伯苦茶油,雅芯香草園,川桑果園,文獻農場,301farm農場,DIVA の 吃貨棧,DIVA の 吃貨棧,五寮尖山羊乳,清淨母語,雅芯香草園,Wholesome 好•好酸麵包,雅芯香草園,川桑果園,力凡「米」烘焙,呷米,301farm農場,DIVA の 吃貨棧,川桑果園,牧蜂農莊,雅芯香草園,DIVA の 吃貨棧,瑞田有機農場,川桑果園,清淨母語,呷米,Wholesome 好•好酸麵包,DIVA の 吃貨棧,川桑果園,清淨母語,DIVA の 吃貨棧,Wholesome 好•好酸麵包,DIVA の 吃貨棧,部落e購,清淨母語,DIVA の 吃貨棧,Wholesome 好•好酸麵包,瑞田有機農場,川桑果園,清淨母語,臺北有農(臺北市農村),古乙伯苦茶油,松滿緣有機農場,川桑果園,力凡「米」烘焙,DIVA の 吃貨棧,Wholesome 好•好酸麵包,DIVA の 吃貨棧,川桑果園,文獻農場,DIVA の 吃貨棧,古乙伯苦茶油,DIVA の 吃貨棧,301farm農場,力凡「米」烘焙,DIVA の 吃貨棧,Wholesome 好•好酸麵包,臺北有農(臺北市農村),輝要有機菜園,清淨母語,DIVA の 吃貨棧,文獻農場,DIVA の 吃貨棧,川桑果園,松滿緣有機農場,DIVA の 吃貨棧,力凡「米」烘焙,瑞田有機農場,川桑果園
+石牌二,晴盛養蜂場,雅芯香草園,301farm農場,雅芯香草園,美好の食物,輝要有機菜園,呷米,301farm農場,松滿緣有機農場,御品園放牧雞蛋,,阿財綠竹農場,力凡「米」烘焙,美好の食物,晴盛養蜂場,雅芯香草園,阿財綠竹農場,301farm農場,瑞田有機農場,御品園放牧雞蛋,輝要有機菜園,人山艸,301farm農場,瑞田有機農場,御品園放牧雞蛋,清淨母語,呷米,301farm農場,松滿緣有機農場,御品園放牧雞蛋,輝要有機菜園,雅芯香草園,力凡「米」烘焙,瑞田有機農場,安工坊烘焙,力凡「米」烘焙,松滿緣有機農場,古乙伯苦茶油,,御品園放牧雞蛋,輝要有機菜園,人山艸,松滿緣有機農場,吉米農場,御品園放牧雞蛋,松滿緣有機農場,人山艸,小潘農場,DIVA の 吃貨棧,御品園放牧雞蛋,小潘農場,,小潘農場,吉米農場,御品園放牧雞蛋,,,力凡「米」烘焙,瑞田有機農場,安工坊烘焙,,人山艸,301farm農場,雅芯香草園,五寮尖山羊乳,晴盛養蜂場,呷米,Wholesome 好•好酸麵包,部落e購,安工坊烘焙,輝要有機菜園,日盛聯合,Wholesome 好•好酸麵包,部落e購,安工坊烘焙,輝要有機菜園,川桑果園,力凡「米」烘焙,瑞田有機農場,安工坊烘焙,文獻農場,呷米,Wholesome 好•好酸麵包,部落e購,御品園放牧雞蛋,輝要有機菜園,人山艸,Wholesome 好•好酸麵包,DIVA の 吃貨棧,安工坊烘焙,文獻農場,川桑果園,Wholesome 好•好酸麵包,瑞田有機農場,安工坊烘焙,饅實在小舖,川桑果園,Wholesome 好•好酸麵包,瑞田有機農場,安工坊烘焙,清淨母語,呷米,Wholesome 好•好酸麵包,力凡「米」烘焙,安工坊烘焙,輝要有機菜園,呷米,Wholesome 好•好酸麵包,日心農場,安工坊烘焙,清淨母語,,蓋兒手釀,臺北有農(臺北市農村),安工坊烘焙,饅實在小舖,瑞田有機農場,Wholesome 好•好酸麵包,瑞田有機農場,安工坊烘焙,松滿緣有機農場,人山艸,Wholesome 好•好酸麵包,部落e購,,清淨母語,呷米,Wholesome 好•好酸麵包,臺北有農(臺北市農村),安工坊烘焙,輝要有機菜園,臺北有農(臺北市農村),古乙伯苦茶油,DIVA の 吃貨棧,麥莉貝果,清淨母語,臺北有農(臺北市農村),臺北有農(臺北市農村),瑞田有機農場,部落e購,臺北有農(臺北市農村),臺北有農(臺北市農村),古乙伯苦茶油,松滿緣有機農場,安工坊烘焙,臺北有農(臺北市農村),臺北有農(臺北市農村),古乙伯苦茶油,瑞田有機農場,安工坊烘焙,臺北有農(臺北市農村),松滿緣有機農場,力凡「米」烘焙,人山艸,川桑果園,臺北有農(臺北市農村),瑞田有機農場,古乙伯苦茶油,DIVA の 吃貨棧,安工坊烘焙,輝要有機菜園,瑞田有機農場,臺北有農(臺北市農村),DIVA の 吃貨棧,安工坊烘焙,清淨母語,呷米,古乙伯苦茶油,部落e購,安工坊烘焙,清淨母語,瑞田有機農場,清淨母語,人山艸,川桑果園,牧蜂農莊,川桑果園,松滿緣有機農場,人山艸,川桑果園,臺北有農(臺北市農村),川桑果園,古乙伯苦茶油,臺北有農(臺北市農村),安工坊烘焙,清淨母語,川桑果園,古乙伯苦茶油,人山艸,安工坊烘焙
+石牌三,清淨母語,阿財綠竹農場,,吉米農場,呷米,文獻農場,,古乙伯苦茶油,部落e購,安工坊烘焙,,人山艸,,DIVA の 吃貨棧,安工坊烘焙,牧蜂農莊,人山艸,晴盛養蜂場,部落e購,安工坊烘焙,,呷米,清淨母語,吉米農場,美好の食物,,,古乙伯苦茶油,部落e購,川桑果園,清淨母語,人山艸,小潘農場,雅芯香草園,御品園放牧雞蛋,輝要有機菜園,呷米,,,呷米,清淨母語,呷米,小潘農場,,部落e購,,,力凡「米」烘焙,雅芯香草園,安工坊烘焙,,,五寮尖山羊乳,部落e購,安工坊烘焙,,,古乙伯苦茶油,部落e購,,,,松滿緣有機農場,部落e購,,文獻農場,川桑果園,301farm農場,瑞田有機農場,部落e購,臺北有農(臺北市農村),臺北有農(臺北市農村),小潘農場,瑞田有機農場,輝要有機菜園,臺北有農(臺北市農村),瑞田有機農場,小潘農場,清淨母語,部落e購,輝要有機菜園,人山艸,五寮尖山羊乳,瑞田有機農場,301farm農場,清淨母語,川桑果園,力凡「米」烘焙,瑞田有機農場,部落e購,輝要有機菜園,瑞田有機農場,清淨母語,日心農場,部落e購,輝要有機菜園,瑞田有機農場,301farm農場,DIVA の 吃貨棧,部落e購,輝要有機菜園,瑞田有機農場,小潘農場,瑞田有機農場,部落e購,清淨母語,瑞田有機農場,301farm農場,瑞田有機農場,部落e購,輝要有機菜園,阿財綠竹農場,小潘農場,蓋兒手釀,部落e購,輝要有機菜園,阿財綠竹農場,301farm農場,日心農場,部落e購,輝要有機菜園,瑞田有機農場,301farm農場,瑞田有機農場,,臺北有農(臺北市農村),臺北有農(臺北市農村),力凡「米」烘焙,日心農場,部落e購,饅實在小舖,瑞田有機農場,松滿緣有機農場,瑞田有機農場,清淨母語,臺北有農(臺北市農村),瑞田有機農場,Wholesome 好•好酸麵包,日心農場,五寮尖山羊乳,輝要有機菜園,瑞田有機農場,臺北有農(臺北市農村),日心農場,部落e購,輝要有機菜園,瑞田有機農場,清淨母語,文獻農場,呷米,輝要有機菜園,臺北有農(臺北市農村),古乙伯苦茶油,瑞田有機農場,安工坊烘焙,輝要有機菜園,雅芯香草園,臺北有農(臺北市農村),雅芯香草園,呷米,饅實在小舖,,五寮尖山羊乳,挑實｜酸種麵包,清淨母語,臺北有農(臺北市農村),臺北有農(臺北市農村),臺北有農(臺北市農村),日心農場,呷米,臺北有農(臺北市農村),日心農場,臺北有農(臺北市農村),臺北有農(臺北市農村),安工坊烘焙,臺北有農(臺北市農村),呷米,清淨母語,挑實｜酸種麵包,安工坊烘焙,輝要有機菜園,臺北有農(臺北市農村),清淨母語,挑實｜酸種麵包,五寮尖山羊乳,臺北有農(臺北市農村),臺北有農(臺北市農村),臺北有農(臺北市農村),臺北有農(臺北市農村),呷米
+石牌四,,人山艸,力凡「米」烘焙,部落e購,安工坊烘焙,,人山艸,清淨母語,文獻農場,呷米,,呷米,,吉米農場,呷米,清淨母語,呷米,古乙伯苦茶油,,,,,五寮尖山羊乳,部落e購,呷米,,,小潘農場,,呷米,,呷米,,吉米農場,川桑果園,清淨母語,,,,部落e購,,文獻農場,,,,,,古乙伯苦茶油,瑞田有機農場,部落e購,,,,,松滿緣有機農場,,,小潘農場,,,,,小潘農場,,,輝要有機菜園,瑞田有機農場,清淨母語,吉米農場,小潘農場,日盛聯合,瑞田有機農場,蓋兒手釀,蓋兒手釀,松滿緣有機農場,日盛聯合,臺北有農(臺北市農村),五寮尖山羊乳,吉米農場,五寮尖山羊乳,日盛聯合,瑞田有機農場,小潘農場,清淨母語,部落e購,日盛聯合,瑞田有機農場,301farm農場,吉米農場,呷米,日盛聯合,松滿緣有機農場,小潘農場,DIVA の 吃貨棧,川桑果園,日盛聯合,人山艸,小潘農場,日心農場,五寮尖山羊乳,日盛聯合,阿財綠竹農場,部落e購,日心農場,松滿緣有機農場,日盛聯合,人山艸,小潘農場,吉米農場,松滿緣有機農場,日盛聯合,人山艸,松滿緣有機農場,301farm農場,清淨母語,日盛聯合,人山艸,小潘農場,DIVA の 吃貨棧,五寮尖山羊乳,日盛聯合,阿財綠竹農場,清淨母語,日心農場,,輝要有機菜園,瑞田有機農場,古乙伯苦茶油,瑞田有機農場,松滿緣有機農場,牧蜂農莊,,臺北有農(臺北市農村),挑實｜酸種麵包,部落e購,輝要有機菜園,,古乙伯苦茶油,挑實｜酸種麵包,清淨母語,饅實在小舖,,,吉米農場,五寮尖山羊乳,饅實在小舖,301farm農場,臺北有農(臺北市農村),日心農場,部落e購,饅實在小舖,瑞田有機農場,臺北有農(臺北市農村),臺北有農(臺北市農村),清淨母語,牧蜂農莊,臺北有農(臺北市農村),德玉茶園,日心農場,部落e購,牧蜂農莊,,德玉茶園,日心農場,部落e購,輝要有機菜園,雅芯香草園,德玉茶園,挑實｜酸種麵包,五寮尖山羊乳,牧蜂農莊,臺北有農(臺北市農村),,吉米農場,五寮尖山羊乳,輝要有機菜園,臺北有農(臺北市農村),臺北有農(臺北市農村),部落e購,呷米,牧蜂農莊,瑞田有機農場,臺北有農(臺北市農村),部落e購,,輝要有機菜園,瑞田有機農場,,DIVA の 吃貨棧,五寮尖山羊乳`;
 
     createApp({
         setup() {
             const csvInput = ref(defaultCSV);
             const showInput = ref(false);
-            const currentView = ref('kanban'); 
+            const currentView = ref('matrix'); 
             const compareList = ref(['', '', '', '']); 
             
             // 系統資料
@@ -344,12 +401,6 @@
             const contactInfo = ref('訂購專線: 0912-345-678\nLine ID: @example');
             const qrUrl1 = ref('https://www.facebook.com');
             const qrUrl2 = ref('');
-
-            const drawers = [
-                { key: '雙連', name: '雙連', colorClass: 'bg-blue-500' },
-                { key: '士林', name: '士林', colorClass: 'bg-emerald-500' },
-                { key: '石牌', name: '石牌', colorClass: 'bg-amber-500' }
-            ];
 
             const navClass = (view) => currentView.value === view ? 'bg-emerald-600 text-white shadow font-bold' : 'text-slate-400 hover:text-white';
 
@@ -382,6 +433,7 @@
                     if (stationRaw.includes('雙連')) drawerKey = '雙連';
                     else if (stationRaw.includes('士林')) drawerKey = '士林';
                     else if (stationRaw.includes('石牌')) drawerKey = '石牌';
+                    else if (stationRaw.includes('北投')) drawerKey = '北投';
 
                     row.forEach((cell, idx) => {
                         if (idx === 0) return;
@@ -416,22 +468,13 @@
                 return list.sort();
             });
 
-            // 擴充月份清單，強制加入 2026/04 ~ 2026/08 以涵蓋產乳旺季
+            // 擴充月份清單，涵蓋產乳旺季 P3
             const allMonths = computed(() => {
                 const dataMonths = schedules.value.map(s => s.date.substring(0, 7));
                 const peakSeasonMonths = ['2026-04', '2026-05', '2026-06', '2026-07', '2026-08'];
                 return [...new Set([...dataMonths, ...peakSeasonMonths])].sort();
             });
             
-            const truncateName = (name) => name.length > 3 ? name.substring(0, 3) + '..' : name;
-
-            const handleSyncScroll = (evt) => {
-                const scrollTop = evt.target.scrollTop;
-                document.querySelectorAll('.sync-scroll-target').forEach(el => {
-                    if (Math.abs(el.scrollTop - scrollTop) > 5) el.scrollTop = scrollTop;
-                });
-            };
-
             // 總表「跳至今日」滾動功能
             const scrollToToday = () => {
                 nextTick(() => {
@@ -451,43 +494,6 @@
                 });
             };
 
-            // Kanban Data
-            const calendarWeeks = computed(() => {
-                const dates = [...new Set(schedules.value.map(s => s.date))].sort();
-                if (dates.length === 0) return [];
-                const start = new Date(dates[0]);
-                const end = new Date(dates[dates.length-1]);
-                start.setDate(start.getDate() - (start.getDay() === 0 ? 6 : start.getDay() - 1));
-
-                const weeks = [];
-                let curr = new Date(start);
-                let lastMonth = -1;
-
-                while (curr <= end) {
-                    const days = [];
-                    let monthLabel = '';
-                    let isMonthStart = false;
-
-                    for (let i = 0; i < 5; i++) {
-                        const dStr = curr.toISOString().slice(0, 10);
-                        const m = curr.getMonth() + 1;
-                        if (m !== lastMonth && i === 0) {
-                            monthLabel = `${curr.getFullYear()}年 ${m}月`;
-                            isMonthStart = true;
-                            lastMonth = m;
-                        }
-                        days.push({ dateStr: dStr, dayNum: curr.getDate() });
-                        curr.setDate(curr.getDate() + 1);
-                    }
-                    weeks.push({ id: weeks.length, monthLabel, isMonthStart, days });
-                    curr.setDate(curr.getDate() + 2); 
-                }
-                return weeks;
-            });
-
-            const getShifts = (date, drawer) => schedules.value.filter(s => s.date === date && s.drawer === drawer);
-            const getDrawerShiftCount = (drawer) => schedules.value.filter(s => s.drawer === drawer).length;
-
             // Matrix Data
             const matrixHeaders = computed(() => {
                 const dates = [...new Set(schedules.value.map(s => s.date))].sort();
@@ -501,45 +507,81 @@
             const matrixGroups = computed(() => {
                 const groups = [];
                 const allStations = [...new Set(schedules.value.map(s => s.station))].sort();
-                ['雙連', '士林', '石牌'].forEach(key => {
+                // 新增北投站
+                ['雙連', '士林', '石牌', '北投'].forEach(key => {
                     const myStations = allStations.filter(s => s.includes(key));
                     const rows = myStations.map(st => {
                         const cells = matrixHeaders.value.map(h => {
                             const match = schedules.value.find(s => s.date === h.date && s.station === st);
                             return match ? match.staff : '';
                         });
-                        return { station: st, cells, isShilin: key === '士林' };
+                        return { station: st, cells, isShilin: key === '士林', isBeitou: key === '北投' };
                     });
                     if (rows.length > 0) {
                         let badgeClass = 'bg-slate-500';
                         if (key === '雙連') badgeClass = 'bg-blue-500';
                         if (key === '士林') badgeClass = 'bg-emerald-500';
                         if (key === '石牌') badgeClass = 'bg-amber-500';
+                        if (key === '北投') badgeClass = 'bg-purple-500';
                         groups.push({ name: key, rows, badgeClass });
                     }
                 });
                 return groups;
             });
 
-            // Analysis Data
+            // 總表新增排班
+            const editEmptyCell = (station, date) => {
+                Swal.fire({
+                    title: `新增排班`,
+                    html: `為 <b>${station}</b> 於 <b>${date}</b> 安排廠商：`,
+                    input: 'text',
+                    showCancelButton: true,
+                    confirmButtonText: '確定',
+                    cancelButtonText: '取消'
+                }).then(res => {
+                    if (res.isConfirmed && res.value.trim()) {
+                        let drawerKey = '';
+                        if (station.includes('雙連')) drawerKey = '雙連';
+                        else if (station.includes('士林')) drawerKey = '士林';
+                        else if (station.includes('石牌')) drawerKey = '石牌';
+                        else if (station.includes('北投')) drawerKey = '北投';
+
+                        const newShift = {
+                            id: Math.random().toString(36).slice(2),
+                            date: date,
+                            drawer: drawerKey,
+                            station: station,
+                            subStation: station.replace(drawerKey, ''),
+                            staff: res.value.trim()
+                        };
+                        db.ref(`schedules/${newShift.id}`).set(newShift);
+                    }
+                });
+            };
+
+            // Analysis Data (P1, P2, P3 分期)
             const analysisStats = computed(() => {
                 return uniqueStaffList.value.map(name => {
                     const shifts = schedules.value.filter(s => s.staff === name);
+                    // P1: 11, 12, 1 月
                     const p1Shifts = shifts.filter(s => [11, 12, 1].includes(parseInt(s.date.split('-')[1])));
+                    // P2: 2, 3, 4 月
                     const p2Shifts = shifts.filter(s => [2, 3, 4].includes(parseInt(s.date.split('-')[1])));
+                    // P3: 5, 6, 7 月
+                    const p3Shifts = shifts.filter(s => [5, 6, 7].includes(parseInt(s.date.split('-')[1])));
+                    
                     const p1Count = p1Shifts.length;
                     const p2Count = p2Shifts.length;
-                    
-                    let growth = 0;
-                    if (p1Count > 0) growth = Math.round(((p2Count - p1Count) / p1Count) * 100);
-                    else if (p2Count > 0) growth = 100;
+                    const p3Count = p3Shifts.length;
 
                     const getDist = (list) => {
-                        const t = list.length || 1;
+                        if(list.length === 0) return '-';
+                        const t = list.length;
                         const sl = list.filter(s => s.drawer === '雙連').length;
                         const slin = list.filter(s => s.drawer === '士林').length;
                         const sp = list.filter(s => s.drawer === '石牌').length;
-                        return `${Math.round(sl/t*100)} / ${Math.round(slin/t*100)} / ${Math.round(sp/t*100)}`;
+                        const bt = list.filter(s => s.drawer === '北投').length;
+                        return `${Math.round(sl/t*100)} / ${Math.round(slin/t*100)} / ${Math.round(sp/t*100)} / ${Math.round(bt/t*100)}`;
                     };
 
                     const calcRev = (count) => {
@@ -548,18 +590,21 @@
                         return Math.round(count * 800 * rate);
                     };
 
-                    const totalCount = p1Count + p2Count;
+                    // 計算三個週期的加總基準，維持原本的折讓條件邏疑
+                    const totalCount = p1Count + p2Count + p3Count;
                     let tier = 'gray';
                     if (totalCount >= 20) tier = 'gold';
                     else if (totalCount >= 10) tier = 'blue';
 
                     return {
-                        name, p1Count, p2Count, growth, tier,
-                        p1Dist: getDist(p1Shifts), p2Dist: getDist(p2Shifts),
-                        p1Rev: calcRev(p1Count), p2Rev: calcRev(p2Count),
-                        totalRev: calcRev(p1Count + p2Count)
+                        name, 
+                        p1Count, p2Count, p3Count, 
+                        totalCount, tier,
+                        p1Dist: getDist(p1Shifts), p2Dist: getDist(p2Shifts), p3Dist: getDist(p3Shifts),
+                        p1Rev: calcRev(p1Count), p2Rev: calcRev(p2Count), p3Rev: calcRev(p3Count),
+                        totalRev: calcRev(totalCount) // 總預估營收以整體折扣計算
                     };
-                }).sort((a,b) => b.p2Count - a.p2Count);
+                }).sort((a,b) => b.totalCount - a.totalCount);
             });
 
             // My Schedule Data
@@ -581,25 +626,6 @@
                     return { label: `${y}年 ${m}月`, days };
                 });
             });
-
-            // 班表編輯 (同步至 Firebase)
-            const editShiftCard = (shift) => {
-                Swal.fire({
-                    title: '編輯排班',
-                    input: 'text',
-                    inputValue: shift.staff,
-                    showDenyButton: true,
-                    denyButtonText: '刪除',
-                    confirmButtonText: '保存'
-                }).then((res) => {
-                    if (res.isConfirmed) {
-                        db.ref(`schedules/${shift.id}`).update({ staff: res.value });
-                    } else if (res.isDenied) {
-                        db.ref(`schedules/${shift.id}`).remove();
-                        db.ref(`sales/${shift.id}`).remove(); // 同步移除業績
-                    }
-                });
-            };
 
             // 業績回報功能 (寫入 Firebase)
             const reportSales = (shift) => {
@@ -664,9 +690,9 @@
 
             // Firebase 掛載與監聽
             onMounted(() => {
-                // 預設產季專注選項
+                // 預設產季專注選項 (預設勾選 P3 旺季)
                 if (printMonths.value.length === 0) {
-                    printMonths.value = ['2026-04', '2026-05', '2026-06', '2026-07', '2026-08'];
+                    printMonths.value = ['2026-05', '2026-06', '2026-07'];
                 }
 
                 // 監聽排班表變動
@@ -678,7 +704,7 @@
                         
                         // 設定初次主角
                         if (!printTarget.value && uniqueStaffList.value.length > 0) {
-                            printTarget.value = '五寮尖山羊乳'; // 預設保留你的最愛
+                            printTarget.value = '五寮尖山羊乳';
                         }
                     } else if (csvInput.value) {
                         // 如果資料庫是空的，將預設 CSV 解析並上傳
@@ -698,9 +724,8 @@
 
             return {
                 csvInput, showInput, currentView, processCSV, navClass,
-                drawers, calendarWeeks, getShifts, getDrawerShiftCount, truncateName, handleSyncScroll,
-                matrixHeaders, matrixGroups, todayStr, scrollToToday,
-                compareList, uniqueStaffList, getComparisonColorClass, editShiftCard,
+                matrixHeaders, matrixGroups, todayStr, scrollToToday, editEmptyCell,
+                compareList, uniqueStaffList, getComparisonColorClass,
                 analysisStats, getRowColor,
                 printTarget, printMonths, allMonths, contactInfo, qrUrl1, qrUrl2, selectedMonthData, genQR, printNow,
                 isDBConnected, salesData, reportSales
